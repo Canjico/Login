@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Configuração da URL da API de Produção -->
+  <meta name="api-base" content="https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net">
+  <title>Atimus | Acesso aos Editais</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: linear-gradient(135deg, #0b1220, #111827);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      padding: 20px;
+    }
+
+    .login-container {
+      background: #0f172a;
+      padding: 40px;
+      border-radius: 14px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      border: 1px solid #1e293b;
+    }
+
+    .header-area h1 {
+      margin-bottom: 8px;
+      font-size: 26px;
+      font-weight: 700;
+      color: #f8fafc;
+      text-align: center;
+    }
+
+    .header-area p {
+      color: #94a3b8;
+      margin-bottom: 20px;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .tabs {
+        display: flex;
+        margin-bottom: 25px;
+        background: #020617;
+        padding: 4px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+    }
+
+    .tab {
+        flex: 1;
+        text-align: center;
+        padding: 10px;
+        font-size: 14px;
+        cursor: pointer;
+        border-radius: 6px;
+        color: #94a3b8;
+        transition: all 0.2s;
+    }
+
+    .tab.active {
+        background: #1e293b;
+        color: #fff;
+        font-weight: 600;
+    }
+
+    form input {
+      width: 100%;
+      padding: 14px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #020617;
+      color: #f1f5f9;
+      font-size: 15px;
+    }
+
+    form input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+
+    .password-group {
+      position: relative;
+      margin-bottom: 12px;
+    }
+
+    .password-group input {
+      margin-bottom: 0;
+      padding-right: 45px;
+    }
+
+    .toggle-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 4px;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s;
+    }
+
+    .toggle-btn:hover {
+      color: #f1f5f9;
+    }
+    
+    .toggle-btn svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    form label {
+      font-size: 13px;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      margin: 12px 0;
+      gap: 10px;
+      cursor: pointer;
+    }
+
+    form input[type="checkbox"] {
+      accent-color: #2563eb;
+      width: 16px;
+      height: 16px;
+      margin-bottom: 0;
+    }
+
+    button[type="submit"] {
+      width: 100%;
+      padding: 14px;
+      background: #2563eb;
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    button[type="submit"]:hover {
+      background: #1d4ed8;
+    }
+
+    .hidden {
+        display: none !important;
+    }
+
+    .alert {
+        padding: 12px;
+        border-radius: 8px;
+        background: #059669;
+        color: #fff;
+        font-size: 14px;
+        text-align: center;
+        margin-bottom: 20px;
+        display: none;
+    }
+
+    .link-action {
+      display: block;
+      text-align: right;
+      color: #3b82f6;
+      font-size: 13px;
+      text-decoration: none;
+      margin-bottom: 15px;
+      cursor: pointer;
+    }
+    .link-action:hover {
+      text-decoration: underline;
+    }
+
+    .back-btn {
+        background: none;
+        border: none;
+        color: #94a3b8;
+        font-size: 13px;
+        cursor: pointer;
+        margin-top: 15px;
+        width: 100%;
+        text-align: center;
+    }
+    .back-btn:hover {
+        color: #fff;
+        text-decoration: underline;
+    }
+
+    .footer-copy {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 12px;
+      color: #64748b;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="login-container">
+    <div class="header-area">
+        <h1>Atimus</h1>
+        <p>Inteligência em Negócios e Editais</p>
+    </div>
+
+    <div id="alertBox" class="alert"></div>
+
+    <!-- TABS (Login vs Cadastro) -->
+    <div class="tabs" id="authTabs">
+        <div class="tab active" onclick="switchTab('login')">Entrar</div>
+        <div class="tab" onclick="switchTab('cadastro')">Criar Conta</div>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <form id="loginForm">
+        <input type="email" name="email" placeholder="E-mail corporativo" required />
+        
+        <div class="password-group">
+            <input 
+              type="password" 
+              name="senha" 
+              id="loginPass" 
+              placeholder="Sua senha (6-12 caracteres)" 
+              minlength="6"
+              maxlength="12"
+              required 
+            />
+            <button type="button" class="toggle-btn" onclick="toggleVisibility('loginPass', this)" title="Mostrar senha">
+                <svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+            </button>
+        </div>
+
+        <a class="link-action" onclick="showRecovery()">Esqueci minha senha</a>
+
+        <button type="submit">Acessar</button>
+    </form>
+
+    <!-- CADASTRO FORM -->
+    <form id="cadastroForm" class="hidden">
+      <input type="text" name="nome" placeholder="Nome completo" required />
+      <input type="email" name="email" placeholder="E-mail corporativo" required />
+      
+      <div class="password-group">
+          <input 
+            type="password" 
+            name="senha" 
+            id="cadPass" 
+            placeholder="Crie uma senha (6-12 caracteres)" 
+            minlength="6"
+            maxlength="12"
+            required 
+          />
+          <button type="button" class="toggle-btn" onclick="toggleVisibility('cadPass', this)" title="Mostrar senha">
+             <svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+          </button>
+      </div>
+
+      <div class="password-group">
+          <input 
+            type="password" 
+            name="confirma_senha" 
+            id="cadConfPass" 
+            placeholder="Confirme a senha" 
+            minlength="6"
+            maxlength="12"
+            required 
+          />
+          <button type="button" class="toggle-btn" onclick="toggleVisibility('cadConfPass', this)" title="Mostrar senha">
+             <svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+          </button>
+      </div>
+      
+      <input type="text" name="celular" placeholder="Celular (DDD) 90000-0000" maxlength="15" required />
+      <input type="text" name="cnpj" placeholder="CNPJ 00.000.000/0000-00" maxlength="18" required />
+
+      <label>
+        <input type="checkbox" name="contato_ok" required />
+        Concordo que a Atimus possa entrar em contato
+      </label>
+
+      <label>
+        <input type="checkbox" name="politica_ok" required />
+        Concordo com a Política de Segurança de Dados
+      </label>
+
+      <button type="submit">Cadastrar e Verificar</button>
+    </form>
+
+    <!-- RECOVERY FORM (Esqueci Senha) -->
+    <form id="recoveryForm" class="hidden">
+        <h3 style="color:#fff; font-size:18px; text-align:center; margin-bottom:15px;">Recuperar Senha</h3>
+        <p style="color:#94a3b8; font-size:13px; text-align:center; margin-bottom:20px;">
+           Informe seu e-mail cadastrado. Enviaremos um link para você redefinir sua senha.
+        </p>
+
+        <input type="email" name="email" placeholder="Seu e-mail" required />
+
+        <button type="submit">Enviar Link</button>
+        <button type="button" class="back-btn" onclick="switchTab('login')">Voltar para Login</button>
+    </form>
+
+    <!-- RESET PASSWORD FORM (Nova Senha) -->
+    <form id="resetForm" class="hidden">
+        <h3 style="color:#fff; font-size:18px; text-align:center; margin-bottom:15px;">Nova Senha</h3>
+        
+        <div class="password-group">
+            <input 
+              type="password" 
+              name="nova_senha" 
+              id="resetPass" 
+              placeholder="Nova senha (6-12 caracteres)" 
+              minlength="6"
+              maxlength="12"
+              required 
+            />
+            <button type="button" class="toggle-btn" onclick="toggleVisibility('resetPass', this)">
+                <svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+            </button>
+        </div>
+
+        <div class="password-group">
+            <input 
+              type="password" 
+              name="confirma_nova_senha" 
+              id="resetConfPass" 
+              placeholder="Confirme a nova senha" 
+              minlength="6"
+              maxlength="12"
+              required 
+            />
+            <button type="button" class="toggle-btn" onclick="toggleVisibility('resetConfPass', this)">
+                <svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+            </button>
+        </div>
+
+        <button type="submit">Salvar Nova Senha</button>
+    </form>
+
+    <div class="footer-copy">
+      © 2026 Atimus — Inteligência em Negócios
+    </div>
+  </div>
+
+<script>
+// ========================
+// UI LOGIC
+// ========================
+const tabsContainer = document.getElementById('authTabs');
+const loginForm = document.getElementById('loginForm');
+const cadastroForm = document.getElementById('cadastroForm');
+const recoveryForm = document.getElementById('recoveryForm');
+const resetForm = document.getElementById('resetForm');
+
+function hideAllForms() {
+    loginForm.classList.add('hidden');
+    cadastroForm.classList.add('hidden');
+    recoveryForm.classList.add('hidden');
+    resetForm.classList.add('hidden');
+}
+
+function switchTab(tab) {
+    hideAllForms();
+    const tabs = document.querySelectorAll('.tab');
+
+    if (tab === 'login') {
+        loginForm.classList.remove('hidden');
+        tabsContainer.classList.remove('hidden');
+        tabs[0].classList.add('active');
+        tabs[1].classList.remove('active');
+    } else if (tab === 'cadastro') {
+        cadastroForm.classList.remove('hidden');
+        tabsContainer.classList.remove('hidden');
+        tabs[0].classList.remove('active');
+        tabs[1].classList.add('active');
+    }
+}
+
+function showRecovery() {
+    hideAllForms();
+    tabsContainer.classList.add('hidden');
+    recoveryForm.classList.remove('hidden');
+}
+
+function showResetPassword() {
+    hideAllForms();
+    tabsContainer.classList.add('hidden');
+    resetForm.classList.remove('hidden');
+}
+
+// Icons
+const ICON_EYE_OPEN = `<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+const ICON_EYE_CLOSED = `<svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+
+function toggleVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.innerHTML = ICON_EYE_OPEN;
+        } else {
+            input.type = 'password';
+            btn.innerHTML = ICON_EYE_CLOSED;
+        }
+    }
+}
+
+let alertTimeout;
+function showAlert(msg, isError = false) {
+    const box = document.getElementById('alertBox');
+    box.style.display = 'block';
+    box.innerText = msg;
+    box.style.background = isError ? '#dc2626' : '#059669';
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (alertTimeout) clearTimeout(alertTimeout);
+    alertTimeout = setTimeout(() => {
+        box.style.display = 'none';
+    }, 5000);
+}
+
+// Masks
+const maskPhone = (value) => {
+  return value
+    .replace(/\D/g, "")
+    .replace(/^(\d{2})(\d)/g, "($1) $2")
+    .replace(/(\d)(\d{4})$/, "$1-$2");
+};
+
+const maskCNPJ = (value) => {
+  return value
+    .replace(/\D/g, "")
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2")
+    .substring(0, 18);
+};
+
+document.querySelector('input[name="celular"]').addEventListener('input', (e) => {
+    e.target.value = maskPhone(e.target.value);
+});
+
+document.querySelector('input[name="cnpj"]').addEventListener('input', (e) => {
+    e.target.value = maskCNPJ(e.target.value);
+});
+
+
+// ========================
+// API LOGIC
+// ========================
+
+const API_BASE = (() => {
+    const host = window.location.hostname;
+    if (host.includes("localhost") || host.includes("127.0.0.1")) {
+        return "http://127.0.0.1:8000";
+    }
+    return document.querySelector('meta[name="api-base"]')?.content || "https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net";
+})();
+
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('verificado') === 'true') {
+    showAlert("E-mail verificado com sucesso! Faça login.");
+}
+const resetToken = urlParams.get('reset_token');
+if (resetToken) {
+    showResetPassword();
+}
+
+// CADASTRO
+document.getElementById("cadastroForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type='submit']");
+  const originalText = btn.innerText;
+  btn.disabled = true;
+  btn.innerText = "Processando...";
+
+  const form = e.target;
+  const data = {
+    nome: form.nome.value,
+    email: form.email.value,
+    senha: form.senha.value,
+    celular: form.celular.value,
+    cnpj: form.cnpj.value,
+    contato_ok: form.contato_ok.checked,
+    politica_ok: form.politica_ok.checked
+  };
+
+  if (data.senha.length < 6 || data.senha.length > 12) {
+      showAlert("A senha deve ter entre 6 e 12 caracteres.", true);
+      btn.disabled = false; btn.innerText = originalText; return;
+  }
+  if (data.senha !== form.confirma_senha.value) {
+      showAlert("As senhas não conferem.", true);
+      btn.disabled = false; btn.innerText = originalText; return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/cliente/cadastro`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+      credentials: "include"
+    });
+    const json = await res.json();
+
+    if (res.ok) {
+        showAlert("Cadastro criado! Verifique o link enviado para seu e-mail.");
+        form.reset();
+        switchTab('login');
+    } else {
+        let errorMsg = json.detail;
+        if (Array.isArray(errorMsg)) errorMsg = errorMsg.map(e => e.msg).join(", ");
+        showAlert(errorMsg || "Erro ao cadastrar.", true);
+    }
+  } catch (err) {
+    console.error(err);
+    showAlert("Erro de conexão.", true);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = originalText;
+  }
+});
+
+// LOGIN (CORRIGIDO)
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector("button[type='submit']");
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "Entrando...";
+
+    const form = e.target;
+    const data = {
+        email: form.email.value,
+        senha: form.senha.value
+    };
+
+    try {
+        // IMPORTANTE: credentials: 'include' para enviar cookies entre domínios (caso necessário)
+        const res = await fetch(`${API_BASE}/cliente/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+            credentials: "include" 
+        });
+
+        const json = await res.json();
+
+        if (res.ok && json.redirect) {
+            // Sucesso: Redireciona para o App Principal
+            // O cookie 'cliente_token' foi setado pelo backend com secure=True e samesite=None
+            window.location.href = json.redirect;
+        } else {
+            if (res.status === 403) {
+                 showAlert("Seu e-mail ainda não foi verificado. Confira sua caixa de entrada.", true);
+            } else {
+                 showAlert(json.detail || "Erro de login.", true);
+            }
+        }
+    } catch (err) {
+        console.error(err);
+        showAlert("Erro de conexão.", true);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+});
+
+// RECUPERAÇÃO
+document.getElementById("recoveryForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector("button[type='submit']");
+    btn.disabled = true; btn.innerText = "Enviando...";
+
+    try {
+        await fetch(`${API_BASE}/cliente/esqueci-senha`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: e.target.email.value }),
+        });
+        showAlert("Se o e-mail existir, você receberá um link de recuperação.");
+        e.target.reset();
+        setTimeout(() => { switchTab('login'); }, 4000);
+    } catch (err) {
+        console.error(err);
+        showAlert("Erro ao solicitar recuperação.", true);
+    } finally {
+        btn.disabled = false; btn.innerText = "Enviar Link";
+    }
+});
+
+// RESET
+document.getElementById("resetForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!resetToken) return;
+    const btn = e.target.querySelector("button[type='submit']");
+    btn.disabled = true; btn.innerText = "Salvando...";
+
+    const form = e.target;
+    if (form.nova_senha.value !== form.confirma_nova_senha.value) {
+        showAlert("As senhas não conferem.", true);
+        btn.disabled = false; btn.innerText = "Salvar Nova Senha"; return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/cliente/redefinir-senha`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: resetToken, nova_senha: form.nova_senha.value }),
+        });
+        const json = await res.json();
+        if (res.ok) {
+            showAlert("Senha redefinida com sucesso! Faça login.");
+            form.reset();
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setTimeout(() => switchTab('login'), 2000);
+        } else {
+            showAlert(json.detail || "Erro ao redefinir senha.", true);
+        }
+    } catch (err) {
+        console.error(err);
+        showAlert("Erro de conexão.", true);
+    } finally {
+        btn.disabled = false; btn.innerText = "Salvar Nova Senha";
+    }
+});
+
+// ========================
+// AUTO REDIRECT SE JÁ LOGADO
+// ========================
+(async () => {
+    try {
+        // credentials: "include" é crucial para enviar o cookie de verificação
+        const res = await fetch(`${API_BASE}/cliente/me`, {
+            credentials: "include"
+        });
+        
+        if (res.ok) {
+            const json = await res.json();
+            if (json.logado && json.redirect) {
+                // Redireciona imediatamente se a sessão for válida
+                window.location.href = json.redirect;
+            }
+        }
+    } catch (err) {
+        console.log("Usuário não logado ou erro de conexão, permanece na tela de login.");
+    }
+})();
+
+</script>
+</body>
+</html>

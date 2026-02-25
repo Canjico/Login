@@ -1,0 +1,22 @@
+fastapi==0.111.1
+uvicorn==0.23.0
+gunicorn==21.2.0
+sqlalchemy==2.0.20
+requests
+python-jose[cryptography]
+
+# Versões fixas para corrigir erro de 'AttributeError' e truncamento de 72 bytes
+passlib==1.7.4
+bcrypt==3.2.2
+
+# Azure OpenAI
+openai>=1.0.0
+
+# Processamento de PDF
+PyPDF2
+
+# Driver SQL (Necessário se estiver usando MSSQL/SQL Server)
+pyodbc
+
+# Envio de Email (Azure Communication Services)
+azure-communication-email
