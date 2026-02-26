@@ -5,6 +5,16 @@ import logging
 import uuid
 from datetime import datetime, timedelta, date, time
 
+import re
+import html
+from typing import Any, Optional, Dict, List, Tuple
+from html.parser import HTMLParser
+
+try:
+    from docx import Document as DocxDocument
+except Exception:
+    DocxDocument = None
+
 import requests
 from fastapi import FastAPI, Depends, HTTPException, Body, Request, status, Cookie, Response
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -213,6 +223,168 @@ def simular_envio_email(email: str, token: str, tipo: str = "verificacao"):
     logger.info(f"[SIMULAÇÃO DE EMAIL - {tipo.upper()}] Para: {mask_email(email)}")
     logger.info(f"[AÇÃO] Clique no link: {link}")
     logger.info("====================================================")
+
+# =========================
+# Chatbot: Leitura de fontes + Evidências (RAG leve)
+# =========================
+
+# Limites para não explodir memória/latência
+CHAT_MAX_DOWNLOAD_BYTES = int(os.getenv("CHAT_MAX_DOWNLOAD_BYTES", "12000000"))  # 12 MB
+CHAT_REQUEST_TIMEOUT = int(os.getenv("CHAT_REQUEST_TIMEOUT", "15"))             # segundos
+CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "600"))                      # resposta curta
+CHAT_MAX_SOURCES = int(os.getenv("CHAT_MAX_SOURCES", "12"))                     # hard cap por edital
+
+_STOPWORDS_PT = {
+    "a","o","os","as","um","uma","uns","umas","de","da","do","das","dos","em","no","na","nos","nas",
+    "para","por","com","sem","que","e","é","ser","se","ao","aos","à","às","ou","como","mais","menos",
+    "sobre","entre","até","já","não","sim","qual","quais","quando","onde","quem","porque","porquê",
+    "pra","pro","pelo","pela","pelos","pelas","sua","seu","suas","seus","minha","meu","meus","minhas"
+}
+
+class _HTMLStripper(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self._chunks: List[str] = []
+
+    def handle_data(self, data: str) -> None:
+        if data and data.strip():
+            self._chunks.append(data.strip())
+
+    def get_text(self) -> str:
+        return "\n".join(self._chunks)
+
+def _html_to_text(raw_html: str) -> str:
+    stripper = _HTMLStripper()
+    stripper.feed(raw_html)
+    return stripper.get_text()
+
+def _download_url(url: str, timeout: int, max_bytes: int) -> Tuple[bytes, str]:
+    """Baixa uma URL com limite de tamanho. Retorna (bytes, content_type)."""
+    headers = {
+        "User-Agent": "AtimusBot/1.0 (+https://editais.atimus.agr.br)",
+        "Accept": "*/*"
+    }
+    with requests.get(url, headers=headers, timeout=timeout, stream=True) as r:
+        r.raise_for_status()
+        content_type = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        data = bytearray()
+        for chunk in r.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            data.extend(chunk)
+            if len(data) > max_bytes:
+                raise ValueError(f"Arquivo grande demais (> {max_bytes} bytes).")
+        return bytes(data), content_type
+
+def _extract_pdf_text(content: bytes) -> str:
+    reader = PdfReader(io.BytesIO(content))
+    out = []
+    for page in reader.pages:
+        try:
+            out.append(page.extract_text() or "")
+        except Exception:
+            continue
+    return "\n".join(out)
+
+def _extract_docx_text(content: bytes) -> str:
+    if DocxDocument is None:
+        raise RuntimeError("python-docx não disponível no servidor.")
+    doc = DocxDocument(io.BytesIO(content))
+    parts: List[str] = []
+    for p in doc.paragraphs:
+        if p.text and p.text.strip():
+            parts.append(p.text.strip())
+    # Tabelas (muitos editais escondem info aqui)
+    try:
+        for t in doc.tables:
+            for row in t.rows:
+                cells = [c.text.strip() for c in row.cells if c.text and c.text.strip()]
+                if cells:
+                    parts.append(" | ".join(cells))
+    except Exception:
+        pass
+    return "\n".join(parts)
+
+def _safe_decode(content: bytes) -> str:
+    for enc in ("utf-8", "latin-1", "cp1252"):
+        try:
+            return content.decode(enc)
+        except Exception:
+            continue
+    return content.decode("utf-8", errors="ignore")
+
+def _infer_kind(url: str, content_type: str, declared_tipo: str | None = None) -> str:
+    u = (url or "").lower()
+    ct = (content_type or "").lower()
+    tp = (declared_tipo or "").lower()
+
+    if "pdf" in ct or u.endswith(".pdf") or "pdf" in tp:
+        return "pdf"
+    if "word" in ct or u.endswith(".docx") or "docx" in tp:
+        return "docx"
+    if "html" in ct or u.endswith(".html") or u.endswith(".htm") or "página" in tp or "pagina" in tp:
+        return "html"
+    if "text/plain" in ct or u.endswith(".txt"):
+        return "text"
+    return "bin"
+
+def _tokenize_query(q: str) -> List[str]:
+    q = (q or "").lower()
+    q = re.sub(r"[^a-z0-9áàâãéêíóôõúç\s-]", " ", q, flags=re.IGNORECASE)
+    toks = [t.strip() for t in q.split() if len(t.strip()) >= 3]
+    return [t for t in toks if t not in _STOPWORDS_PT]
+
+def _select_snippets(text: str, query: str, max_snippets: int = 3, snippet_len: int = 900) -> List[str]:
+    if not text:
+        return []
+    toks = _tokenize_query(query)
+    paras = [p.strip() for p in re.split(r"\n{2,}|\r\n\r\n", text) if p and p.strip()]
+    if not paras:
+        paras = [p.strip() for p in text.splitlines() if p.strip()]
+
+    # Score por overlap simples (rápido e suficiente pro caso)
+    scored: List[Tuple[int, str]] = []
+    for p in paras:
+        lp = p.lower()
+        score = 0
+        for t in toks:
+            if t in lp:
+                score += 1
+        if score > 0:
+            scored.append((score, p))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    out: List[str] = []
+    candidates = [p for _, p in scored[: max_snippets * 2]] if scored else paras[:max_snippets]
+    for p in candidates:
+        s = re.sub(r"\s+", " ", p).strip()
+        if len(s) > snippet_len:
+            s = s[:snippet_len].rstrip() + "…"
+        if s and s not in out:
+            out.append(s)
+        if len(out) >= max_snippets:
+            break
+    return out
+
+def _escape(s: str) -> str:
+    return html.escape(s or "", quote=True)
+
+def _sources_details_html(sources: List[Dict[str, Any]]) -> str:
+    ok = sum(1 for s in sources if s.get("status") == "ok")
+    total = len(sources)
+    items = []
+    for s in sources[:25]:
+        st = "✅" if s.get("status") == "ok" else "⚠️"
+        nome = _escape(str(s.get("nome") or s.get("host") or "fonte"))
+        url = _escape(str(s.get("url") or ""))
+        kind = _escape(str(s.get("kind") or ""))
+        extra = _escape(str(s.get("error") or ""))
+        chars = s.get("chars")
+        chars_txt = f" • {chars} chars" if isinstance(chars, int) else ""
+        items.append(f"<li>{st} <a href=\"{url}\" target=\"_blank\" rel=\"noopener noreferrer\">{nome}</a> <small>({kind}{chars_txt})</small>{(' — ' + extra) if extra else ''}</li>")
+    inner = "<ul style=\"margin:8px 0 0 18px;\">" + "".join(items) + "</ul>" if items else ""
+    return f"<details style=\"margin-top:10px;\"><summary>Fontes consultadas: {ok}/{total} acessadas</summary>{inner}</details>"
 
 # =========================
 # Middleware de Log
@@ -488,42 +660,206 @@ async def chat_search(msg: ChatMessage, db: Session = Depends(get_db)):
 
 @app.post("/chat/edital/{edital_id}")
 async def chat_edital(edital_id: int, msg: ChatMessage, db: Session = Depends(get_db)):
+    """Chat contextual por edital.
+    Regras:
+    - Resposta curta (resumo).
+    - Só afirma com evidência (CARD ou FONTE X).
+    - Faz o melhor esforço para ACESSAR e LER todos os links em arquivos_json.
+    """
     if not client:
         return {"reply": "Chat indisponível no momento. (Azure OpenAI não configurado)."}
+
+    user_q = (msg.message or "").strip()
+    if not user_q:
+        return {"reply": "Digite uma pergunta objetiva (ex: 'Qual o prazo?' / 'Quem pode participar?')."}
+
     edital = db.query(Edital).filter(Edital.id == edital_id).first()
     if not edital:
         return {"reply": "Edital não encontrado."}
+
+    # 1) Dados do card (às vezes já responde)
+    try:
+        card = json.loads(edital.json_data) if edital.json_data else {}
+        if not isinstance(card, dict):
+            card = {}
+    except Exception:
+        card = {}
+
+    # 2) Lista de fontes (arquivos + página web)
     try:
         arquivos = json.loads(edital.arquivos_json) if edital.arquivos_json else []
+        if not isinstance(arquivos, list):
+            arquivos = []
     except Exception:
         arquivos = []
-    if not arquivos and edital.pdf_url:
-        arquivos.append({"url": edital.pdf_url})
-    pdf_urls = [a.get("url") for a in arquivos if a.get("url", "").lower().endswith(".pdf")]
-    if not pdf_urls:
-        return {"reply": "Este edital não possui PDF."}
-    texto = ""
-    for url in pdf_urls:
+
+    # Compat: se não vier lista, usa pdf_url antigo
+    if (not arquivos) and getattr(edital, "pdf_url", None):
+        arquivos.append({"tipo": "Documento", "url": edital.pdf_url, "nome": "Edital Completo (PDF)"})
+
+    # Hard cap de segurança (evita edital com 200 links travar o servidor)
+    if len(arquivos) > CHAT_MAX_SOURCES:
+        arquivos = arquivos[:CHAT_MAX_SOURCES]
+
+    sources: List[Dict[str, Any]] = []
+    extracted_by_idx: Dict[int, str] = {}
+
+    for i, a in enumerate(arquivos, start=1):
+        if not isinstance(a, dict):
+            continue
+
+        url = (a.get("url") or "").strip()
+        nome = (a.get("nome") or a.get("host") or f"Fonte {i}").strip()
+        declared_tipo = (a.get("tipo") or "").strip()
+
+        if not url:
+            sources.append({"idx": i, "nome": nome, "url": "", "kind": "unknown", "status": "error", "error": "URL vazia"})
+            continue
+
         try:
-            r = requests.get(url, timeout=10)
-            if r.status_code == 200:
-                reader = PdfReader(io.BytesIO(r.content))
-                for page in reader.pages:
-                    texto += page.extract_text() or ""
+            content, content_type = _download_url(url, timeout=CHAT_REQUEST_TIMEOUT, max_bytes=CHAT_MAX_DOWNLOAD_BYTES)
+            kind = _infer_kind(url, content_type, declared_tipo)
+
+            text_out = ""
+            if kind == "pdf":
+                text_out = _extract_pdf_text(content)
+            elif kind == "docx":
+                text_out = _extract_docx_text(content)
+            elif kind == "html":
+                raw = _safe_decode(content)
+                text_out = _html_to_text(raw)
+            elif kind == "text":
+                text_out = _safe_decode(content)
+            else:
+                # Fonte binária não suportada -> registra acesso, mas sem texto.
+                text_out = ""
+
+            # Sanitiza tamanho pra não explodir memória
+            if len(text_out) > 350_000:
+                text_out = text_out[:350_000]
+
+            sources.append({
+                "idx": i,
+                "nome": nome,
+                "url": url,
+                "kind": kind,
+                "status": "ok",
+                "content_type": content_type,
+                "chars": len(text_out),
+            })
+            extracted_by_idx[i] = text_out
+
         except Exception as e:
-            logger.error(f"Erro ao ler PDF {url}: {e}")
-    if not texto.strip():
-        return {"reply": "Não consegui extrair texto do edital."}
-    texto = texto[:200_000]
-    response = client.chat.completions.create(
-        model=DEPLOYMENT_NAME,
-        messages=[
-            {"role": "system", "content": "Você é um assistente especializado em editais. Responda apenas com base no texto fornecido."}, 
-            {"role": "user", "content": f"Pergunta: {msg.message}\n\n{texto}"}
-        ],
-        max_completion_tokens=2048
+            logger.error(f"[CHAT] Erro ao acessar fonte {url}: {e}")
+            sources.append({
+                "idx": i,
+                "nome": nome,
+                "url": url,
+                "kind": "unknown",
+                "status": "error",
+                "error": str(e)[:180],
+            })
+
+    # 3) Monta contexto com evidências curtas
+    card_context = {
+        "titulo": card.get("titulo") or getattr(edital, "titulo", None),
+        "instituicao": card.get("instituicao") or card.get("instituição") or "",
+        "estado": card.get("estado") or "",
+        "objetivo": card.get("objetivo") or card.get("descricao") or getattr(edital, "descricao", "") or "",
+        "publico_alvo": card.get("publico_alvo") or "",
+        "valor_total": card.get("valor_total") or "",
+        "data_final_submissao": card.get("data_final_submissao") or (str(edital.data_final_submissao) if getattr(edital, "data_final_submissao", None) else None),
+        "fluxo_continuo": card.get("fluxo_continuo") if "fluxo_continuo" in card else getattr(edital, "fluxo_continuo", None),
+        "tags": card.get("tags") or [],
+        "motivo_aprovacao": card.get("motivo_aprovacao") or "",
+        "share_link": f"{FRONTEND_APP_URL}?id={edital.id}",
+    }
+
+    # Trechos por fonte (RAG leve)
+    fontes_txt = []
+    for s in sources:
+        idx_ = s.get("idx")
+        if not isinstance(idx_, int):
+            continue
+        txt = extracted_by_idx.get(idx_, "")
+        snippets = _select_snippets(txt, user_q, max_snippets=3, snippet_len=900)
+        # Se a fonte foi acessada mas não tem texto (binário), ainda registra
+        fontes_txt.append({
+            "idx": idx_,
+            "nome": s.get("nome"),
+            "url": s.get("url"),
+            "kind": s.get("kind"),
+            "status": s.get("status"),
+            "snippets": snippets,
+            "chars": s.get("chars"),
+            "error": s.get("error"),
+        })
+
+    context_lines = []
+    context_lines.append("DADOS DO CARD (já exibidos ao cliente):")
+    context_lines.append(json.dumps(card_context, ensure_ascii=False, indent=2))
+
+    context_lines.append("\nFONTES (trechos relevantes; use como evidência):")
+    for f in fontes_txt:
+        idx_ = f.get("idx")
+        nome = f.get("nome") or f"Fonte {idx_}"
+        url = f.get("url") or ""
+        kind = f.get("kind") or "unknown"
+        status_ = f.get("status")
+        context_lines.append(f"\n[FONTE {idx_}] {nome} | {kind} | {url} | status={status_}")
+        if status_ != "ok":
+            context_lines.append(f"ERRO: {f.get('error')}")
+            continue
+        snips = f.get("snippets") or []
+        if not snips:
+            context_lines.append("(sem trechos extraídos)")
+        else:
+            for j, sn in enumerate(snips, start=1):
+                context_lines.append(f"- trecho {j}: {sn}")
+
+    context_blob = "\n".join(context_lines)
+
+    system_prompt = (
+        "Você é um assistente de editais.\n"
+        "Regras obrigatórias:\n"
+        "1) Seja curto: no máximo 10 linhas OU 6 bullets.\n"
+        "2) Só afirme algo se estiver explicitamente nos DADOS DO CARD ou nos TRECHOS das FONTES.\n"
+        "3) Quando citar informação importante (prazo, valor, quem pode participar, documentos, como se inscrever), indique a origem no final da frase: (CARD) ou (FONTE X).\n"
+        "4) Se faltar evidência, diga 'Não encontrei no material disponível' e sugira o que verificar.\n"
+        "5) Se a resposta já estiver no CARD, priorize.\n"
+        "6) Não invente links, números, prazos ou critérios.\n"
+        "Formato sugerido:\n"
+        "- Resumo em bullets\n"
+        "- Evidências (1 a 3 bullets curtas com (CARD)/(FONTE X))\n"
     )
-    return {"reply": response.choices[0].message.content}
+
+    # 4) Chamada ao modelo
+    try:
+        completion = client.chat.completions.create(
+            model=DEPLOYMENT_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Pergunta: {user_q}\n\n{context_blob}"},
+            ],
+            temperature=0.2,
+            max_completion_tokens=CHAT_MAX_TOKENS
+        )
+        reply_txt = (completion.choices[0].message.content or "").strip()
+        if not reply_txt:
+            reply_txt = "Não consegui gerar uma resposta com segurança com base no material disponível."
+    except Exception as e:
+        logger.error(f"[CHAT] Falha ao consultar Azure OpenAI: {e}")
+        return {"reply": "⚠️ Ocorreu um erro ao consultar a IA. Tente novamente em instantes."}
+
+    # 5) Transparência: mostra fontes consultadas (colapsável) sem poluir a resposta
+    details_html = _sources_details_html(sources) if sources else ""
+    reply_html = _escape(reply_txt).replace("\n", "<br>")
+    final_reply = reply_html + details_html
+
+    return {
+        "reply": final_reply,
+        "sources": sources
+    }
 
 # =========================
 # Admin Routes
@@ -647,7 +983,9 @@ def dashboard_stats(db: Session = Depends(get_db), user: dict = Depends(get_curr
     ontem_start = datetime.combine(ontem_date, datetime.min.time())
     ontem_end = datetime.combine(ontem_date, datetime.max.time())
     
-    # 1. KPIs
+    # ==============================
+    # KPIs base (Editais)
+    # ==============================
     qtd_hoje = db.query(Edital).filter(Edital.created_at >= hoje_start, Edital.created_at <= hoje_end).count()
     qtd_ontem = db.query(Edital).filter(Edital.created_at >= ontem_start, Edital.created_at <= ontem_end).count()
     
@@ -655,35 +993,116 @@ def dashboard_stats(db: Session = Depends(get_db), user: dict = Depends(get_curr
         or_(Edital.data_final_submissao >= hoje_date, Edital.fluxo_continuo == True)
     ).count()
     
-    limite_7dias = hoje_date + timedelta(days=7)
-    expirando = db.query(Edital).filter(
+    # Expiração (agora 15 dias)
+    limite_15dias = hoje_date + timedelta(days=15)
+    expirando_15 = db.query(Edital).filter(
         Edital.data_final_submissao >= hoje_date,
-        Edital.data_final_submissao <= limite_7dias
+        Edital.data_final_submissao <= limite_15dias,
+        Edital.fluxo_continuo == False
     ).count()
 
-    captacoes_hoje = db.query(AuditoriaLog).filter(
+    # Mantém compat com frontend antigo (7 dias)
+    limite_7dias = hoje_date + timedelta(days=7)
+    expirando_7 = db.query(Edital).filter(
+        Edital.data_final_submissao >= hoje_date,
+        Edital.data_final_submissao <= limite_7dias,
+        Edital.fluxo_continuo == False
+    ).count()
+
+    # ==============================
+    # KPIs (Instituições / Fontes)
+    # ==============================
+    # "Captações Hoje" agora vira: instituições distintas capturadas hoje.
+    # As instituições vêm do json_data (IA) quando disponível.
+    import json as _json
+
+    editais_hoje_objs = db.query(Edital).filter(
+        Edital.created_at >= hoje_start,
+        Edital.created_at <= hoje_end
+    ).order_by(Edital.created_at.desc()).all()
+
+    instituicoes_set = set()
+    novos_editais_hoje = []
+    for e in editais_hoje_objs:
+        instituicao = None
+        try:
+            jd = _json.loads(e.json_data) if e.json_data else {}
+            instituicao = (jd.get("instituicao") or jd.get("instituição") or jd.get("org") or "")
+            if isinstance(instituicao, str):
+                instituicao = instituicao.strip() or None
+        except Exception:
+            instituicao = None
+
+        if instituicao:
+            instituicoes_set.add(instituicao)
+
+        novos_editais_hoje.append({
+            "id": e.id,
+            "titulo": e.titulo,
+            "fonte": e.link_origem or "Desconhecida",
+            "criado_em": e.created_at.isoformat() if e.created_at else None,
+            "instituicao": instituicao
+        })
+
+    instituicoes_hoje = len(instituicoes_set)
+
+    # Fontes monitoradas: "OK/TOTAL" por dia.
+    # OK = fontes distintas registradas em auditoria_logs HOJE.
+    # TOTAL = valor fixo (atualmente 42) - pode virar env depois.
+    FONTES_TOTAL_DIARIAS = int(os.getenv("FONTES_TOTAL_DIARIAS", "42"))
+    fontes_ok_hoje = db.query(AuditoriaLog.fonte).filter(
         AuditoriaLog.data_execucao >= hoje_start,
         AuditoriaLog.data_execucao <= hoje_end
-    ).count()
+    ).distinct().count()
 
+    # Top fontes: as que mais captaram no total (mantém gráfico e legenda)
     fontes_distinct = db.query(AuditoriaLog.fonte).distinct().all()
     total_fontes = len(fontes_distinct)
     top_fontes = [f[0] for f in fontes_distinct[:3]]
     top_fontes_str = ", ".join([t for t in top_fontes if t]) + ("..." if len(fontes_distinct) > 3 else "")
 
-    # 2. Dados para Gráficos
+    # ==============================
+    # Dados para Gráficos
+    # ==============================
+    # Compat: gráfico antigo por auditoria_logs (qtd de novos editais)
     grafico_dias = []
     for i in range(6, -1, -1):
         d = hoje_date - timedelta(days=i)
         start_dt = datetime.combine(d, datetime.min.time())
         end_dt = datetime.combine(d, datetime.max.time())
-        
+
         qtd = db.query(func.sum(AuditoriaLog.quantidade_novos)).filter(
             AuditoriaLog.data_execucao >= start_dt,
             AuditoriaLog.data_execucao <= end_dt
         ).scalar()
-        
+
         grafico_dias.append({"data": d.strftime("%d/%m"), "qtd": qtd or 0})
+
+    # Novo: gráfico 7 dias por instituições distintas capturadas/dia
+    grafico_instituicoes_7d = []
+    for i in range(6, -1, -1):
+        d = hoje_date - timedelta(days=i)
+        start_dt = datetime.combine(d, datetime.min.time())
+        end_dt = datetime.combine(d, datetime.max.time())
+
+        eds = db.query(Edital.json_data).filter(
+            Edital.created_at >= start_dt,
+            Edital.created_at <= end_dt
+        ).all()
+
+        inst_set = set()
+        for (json_str,) in eds:
+            try:
+                jd = _json.loads(json_str) if json_str else {}
+                inst = (jd.get("instituicao") or jd.get("instituição") or jd.get("org") or "")
+                if isinstance(inst, str):
+                    inst = inst.strip()
+                if inst:
+                    inst_set.add(inst)
+            except Exception:
+                continue
+
+        grafico_instituicoes_7d.append({"data": d.strftime("%d/%m"), "qtd": len(inst_set)})
     
     dist_fontes = db.query(AuditoriaLog.fonte, func.sum(AuditoriaLog.quantidade_novos))\
                     .group_by(AuditoriaLog.fonte)\
@@ -692,30 +1111,89 @@ def dashboard_stats(db: Session = Depends(get_db), user: dict = Depends(get_curr
     
     grafico_fontes = [{"fonte": f[0] or "Desconhecida", "qtd": f[1] or 0} for f in dist_fontes]
 
-    # 3. Alertas do Sistema
+    # ==============================
+    # Alertas do Sistema
+    # ==============================
+    # Regras novas:
+    # - Alertar editais novos de hoje (nome por nome) com detalhe verde.
+    # - Alertar editais que vencem em até 15 dias (do 15º até o HOJE), com cor por urgência.
     alerts = []
-    amanha = hoje_date + timedelta(days=1)
-    vencem_amanha = db.query(Edital).filter(Edital.data_final_submissao == amanha).count()
-    if vencem_amanha > 0:
-        alerts.append({"type": "red", "title": f"{vencem_amanha} editais vencem amanhã", "desc": "Requer ação urgente"})
-    
+
+    # 1) Novos editais hoje (nome por nome)
+    for e in novos_editais_hoje[:25]:  # hard cap pra não estourar UI
+        title = e.get("titulo") or f"Edital #{e.get('id')}"
+        fonte = e.get("fonte") or "Desconhecida"
+        alerts.append({
+            "type": "green",
+            "title": title,
+            "desc": f"Novo hoje • {fonte}",
+            "kind": "novo_edital",
+            "id": e.get("id")
+        })
+
+    # 2) Expirando em até 15 dias (lista detalhada)
+    expirando_lista = []
+    expirando_objs = db.query(Edital).filter(
+        Edital.fluxo_continuo == False,
+        Edital.data_final_submissao != None,
+        Edital.data_final_submissao >= hoje_date,
+        Edital.data_final_submissao <= limite_15dias
+    ).order_by(Edital.data_final_submissao.asc()).all()
+
+    for e in expirando_objs[:50]:
+        dias_restantes = (e.data_final_submissao - hoje_date).days
+        expirando_lista.append({
+            "id": e.id,
+            "titulo": e.titulo,
+            "data_final": str(e.data_final_submissao),
+            "dias_restantes": dias_restantes
+        })
+
+        # Cor por urgência
+        if dias_restantes <= 0:
+            tipo = "red"
+            desc = "Vence HOJE"
+        elif dias_restantes <= 3:
+            tipo = "red"
+            desc = f"Vence em {dias_restantes} dia(s)"
+        elif dias_restantes <= 7:
+            tipo = "yellow"
+            desc = f"Vence em {dias_restantes} dia(s)"
+        else:
+            tipo = "green"
+            desc = f"Vence em {dias_restantes} dia(s)"
+
+        alerts.append({
+            "type": tipo,
+            "title": e.titulo,
+            "desc": desc,
+            "kind": "expirando",
+            "id": e.id,
+            "dias_restantes": dias_restantes
+        })
+
+    # 3) Sanidade do scraping (alerta se zero logs em 24h)
     start_24h = datetime.utcnow() - timedelta(hours=24)
     recent_logs = db.query(AuditoriaLog).filter(AuditoriaLog.data_execucao >= start_24h).count()
     if recent_logs == 0:
-        alerts.append({"type": "yellow", "title": "Nenhuma captação em 24h", "desc": "Verificar conexão com fontes"})
-
-    if qtd_hoje > 0:
-         alerts.append({"type": "green", "title": f"{qtd_hoje} novos editais captados", "desc": "Hoje"})
+        alerts.append({"type": "yellow", "title": "Nenhuma auditoria em 24h", "desc": "Verificar execução do scraping", "kind": "scraping"})
 
     return {
         "editais_hoje": qtd_hoje,
         "editais_ontem": qtd_ontem,
         "total_ativos": total_ativos,
-        "expirando_7_dias": expirando,
-        "captacoes_hoje": captacoes_hoje,
+        "expirando_7_dias": expirando_7,
+        "expirando_15_dias": expirando_15,
+        "captacoes_hoje": instituicoes_hoje,
+        "instituicoes_hoje": instituicoes_hoje,
+        "novos_editais_hoje": novos_editais_hoje,
+        "expirando_lista": expirando_lista,
+        "fontes_ok_hoje": fontes_ok_hoje,
+        "fontes_total": FONTES_TOTAL_DIARIAS,
         "total_fontes": total_fontes,
         "top_fontes_nomes": top_fontes_str,
         "grafico_dias": grafico_dias,
+        "grafico_instituicoes_7d": grafico_instituicoes_7d,
         "grafico_fontes": grafico_fontes,
         "alerts": alerts
     }
@@ -726,8 +1204,8 @@ def executar_auditoria(audit_req: AuditoriaExecucao, db: Session = Depends(get_d
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     janela_inicio = datetime.utcnow() - timedelta(hours=audit_req.horas_retroativas)
-    
-    # Busca Editais Reais para extrair detalhes
+
+    # Busca editais reais para extrair detalhes
     novos_editais_objs = db.query(Edital).filter(
         Edital.created_at >= janela_inicio
     ).all()
@@ -737,35 +1215,121 @@ def executar_auditoria(audit_req: AuditoriaExecucao, db: Session = Depends(get_d
             ciclo=audit_req.ciclo,
             fonte="Geral",
             quantidade_novos=0,
-            detalhes_json=json.dumps({"msg": "Nenhum edital novo no período", "janela_inicio": janela_inicio.isoformat()})
+            detalhes_json=json.dumps({
+                "msg": "Nenhum edital novo no período",
+                "janela_inicio": janela_inicio.isoformat(),
+                "horas_retroativas": audit_req.horas_retroativas
+            }, ensure_ascii=False)
         )
         db.add(log_vazio)
         db.commit()
         return {"msg": "Auditoria executada. Nenhum edital novo encontrado.", "logs": []}
 
+    UF_VALIDAS = {
+        "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI",
+        "RJ","RN","RS","RO","RR","SC","SP","SE","TO","BR"
+    }
+    INSTITUICOES_NACIONAIS = {
+        "CNPQ","FINEP","CAPES","MCTI","MEC","MS","MDIC","BNDES","EMBRAPA","ANA","ANP","ANVISA","IBAMA",
+        "BNB","BASA","BB","CAIXA","SERPRO","DATAPREV","FIOCRUZ"
+    }
+
+    def detectar_incertezas_local(jd: dict, fonte=None) -> list[dict]:
+        if not isinstance(jd, dict):
+            return []
+
+        incertezas: list[dict] = []
+
+        # se já vier do próprio JSON, respeita
+        raw = jd.get("incertezas") or jd.get("campos_incertos")
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict) and item.get("campo"):
+                    incertezas.append({
+                        "campo": str(item.get("campo")),
+                        "valor": item.get("valor"),
+                        "motivo": str(item.get("motivo") or "")
+                    })
+
+        def _norm(s):
+            return (s or "").strip().upper()
+
+        inst = _norm(jd.get("instituicao") or jd.get("instituição"))
+        fonte_norm = _norm(fonte)
+
+        estado = _norm(jd.get("estado"))
+        if not estado:
+            incertezas.append({"campo": "estado", "valor": None, "motivo": "UF não encontrada; campo vazio"})
+        else:
+            if estado not in UF_VALIDAS:
+                incertezas.append({"campo": "estado", "valor": estado, "motivo": "Valor fora do conjunto de UFs conhecidas"})
+            elif estado == "BR":
+                parece_federal = any(k in inst for k in INSTITUICOES_NACIONAIS) or any(k in fonte_norm for k in INSTITUICOES_NACIONAIS)
+                if not parece_federal:
+                    incertezas.append({"campo": "estado", "valor": "BR", "motivo": "UF não identificada com segurança; 'BR' parece fallback"})
+
+        data_final = jd.get("data_final_submissao")
+        if isinstance(data_final, str) and data_final.strip().lower() == "indefinido":
+            incertezas.append({"campo": "data_final_submissao", "valor": data_final, "motivo": "Prazo não encontrado com segurança"})
+        elif data_final is None:
+            incertezas.append({"campo": "data_final_submissao", "valor": None, "motivo": "Campo ausente"})
+
+        valor = jd.get("valor_total")
+        if isinstance(valor, str) and valor.strip().lower() == "indefinido":
+            incertezas.append({"campo": "valor_total", "valor": valor, "motivo": "Valor total não encontrado com segurança"})
+
+        # dedupe
+        seen=set()
+        uniq=[]
+        for it in incertezas:
+            key=(it.get('campo'), str(it.get('valor')), it.get('motivo'))
+            if key in seen:
+                continue
+            seen.add(key)
+            uniq.append(it)
+        return uniq
+
     # Agrupa por fonte em memória (python) para montar o JSON de detalhes
     from collections import defaultdict
-    agrupamento = defaultdict(list)
-    
+    agrupamento: dict[str, list[dict]] = defaultdict(list)
+
     for ed in novos_editais_objs:
         fonte_chave = ed.link_origem if ed.link_origem else "Desconhecida"
+
+        jd = {}
+        try:
+            jd = json.loads(ed.json_data) if ed.json_data else {}
+        except Exception:
+            jd = {}
+
+        incertezas = jd.get("incertezas") or jd.get("campos_incertos")
+        if not isinstance(incertezas, list):
+            incertezas = detectar_incertezas_local(jd, fonte=fonte_chave)
+
         agrupamento[fonte_chave].append({
             "id": ed.id,
             "titulo": ed.titulo,
-            "link": f"{FRONTEND_APP_URL}?id={ed.id}"
+            "link": f"{FRONTEND_APP_URL}?id={ed.id}",
+            "incertezas": incertezas
         })
 
     logs_criados = []
     for fonte_nome, lista_items in agrupamento.items():
+        detalhes_obj = {
+            "janela_inicio": janela_inicio.isoformat(),
+            "horas_retroativas": audit_req.horas_retroativas,
+            "editais": lista_items
+        }
+
         novo_log = AuditoriaLog(
             ciclo=audit_req.ciclo,
             fonte=fonte_nome,
             quantidade_novos=len(lista_items),
-            detalhes_json=json.dumps(lista_items) # Salva a lista real
+            detalhes_json=json.dumps(detalhes_obj, ensure_ascii=False)
         )
         db.add(novo_log)
         logs_criados.append({"fonte": fonte_nome, "qtd": len(lista_items)})
-    
+
     db.commit()
     return {"msg": "Auditoria executada com sucesso.", "resultados": logs_criados}
 
