@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Configuração da URL da API de Produção -->
+  <meta name="api-base" content="https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net" />
+  <!-- Opcional: URL/Email da Central de Ajuda -->
+  <meta name="help-email" content="suporte@atimus.agr.br" />
+  <title>Athos | Login</title>
+
+  <style>
+    :root{
+      --brand: #2f7d78;          /* botão */
+      --brand-hover: #266c67;
+      --link: #2f7d78;
+      --text: #0f172a;
+      --muted: #64748b;
+      --bg-input: #f3f4f6;
+      --border: #e5e7eb;
+      --shadow: 0 18px 40px rgba(0,0,0,.30);
+      --radius: 16px;
+    }
+
+    *{ box-sizing:border-box; margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; }
+
+    body{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      color: var(--text);
+      position:relative;
+      overflow:hidden;
+      background: #0b1220;
+    }
+
+    /* Background (imagem + overlay com blur) */
+    body::before{
+      content:"";
+      position:fixed;
+      inset:0;
+      background-image: url("./assets/login-bg.png");
+      background-size: cover;
+      background-position: center;
+      background-repeat:no-repeat;
+      transform: scale(1.03);
+      z-index:-2;
+    }
+    body::after{
+      content:"";
+      position:fixed;
+      inset:0;
+      background:
+        radial-gradient(1200px 600px at 70% 30%, rgba(47,125,120,.22), transparent 60%),
+        radial-gradient(900px 500px at 20% 70%, rgba(0,0,0,.55), transparent 60%),
+        rgba(0,0,0,.42);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index:-1;
+    }
+
+    .auth-card{
+      width: 100%;
+      max-width: 460px;
+      background: rgba(255,255,255,.96);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 34px 38px 22px;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin-bottom: 18px;
+    }
+    .brand-logo{
+      width: 170px;
+      height: auto;
+      display:block;
+    }
+
+    .title{
+      text-align:center;
+      font-size: 20px;
+      font-weight: 700;
+      margin-top: 4px;
+      margin-bottom: 6px;
+      color: #111827;
+    }
+    .subtitle{
+      text-align:center;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    .alert{
+      display:none;
+      padding: 10px 12px;
+      border-radius: 12px;
+      margin: 10px 0 14px;
+      font-size: 13px;
+      text-align:center;
+      color: #fff;
+      background: #16a34a; /* ok */
+    }
+
+    .field{
+      margin-bottom: 12px;
+    }
+    label{
+      display:block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+
+    input{
+      width:100%;
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 14px;
+      color: #111827;
+      outline: none;
+    }
+    input:focus{
+      border-color: rgba(47,125,120,.55);
+      box-shadow: 0 0 0 3px rgba(47,125,120,.15);
+    }
+
+    .password-wrap{
+      position:relative;
+    }
+    .password-wrap input{
+      padding-right: 42px;
+    }
+    .eye-btn{
+      position:absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 30px;
+      height: 30px;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      cursor:pointer;
+      color: #6b7280;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .eye-btn:hover{ color:#111827; background: rgba(15,23,42,.06); }
+    .eye-btn svg{ width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap:round; stroke-linejoin:round; }
+
+    .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin: 8px 0 14px;
+      gap: 12px;
+    }
+    .remember{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size: 12px;
+      color: #334155;
+      user-select:none;
+    }
+    .remember input{
+      width: 14px;
+      height: 14px;
+      accent-color: var(--brand);
+    }
+
+    .link{
+      font-size: 12px;
+      color: var(--link);
+      text-decoration:none;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .link:hover{ text-decoration: underline; }
+
+    .btn{
+      width:100%;
+      padding: 12px 14px;
+      background: var(--brand);
+      color:#fff;
+      border:none;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor:pointer;
+    }
+    .btn:hover{ background: var(--brand-hover); }
+    .btn:disabled{ opacity:.75; cursor:not-allowed; }
+
+    .divider{
+      height:1px;
+      background: rgba(148,163,184,.35);
+      margin: 16px 0 14px;
+    }
+
+    .hint{
+      text-align:center;
+      font-size: 12px;
+      color: #475569;
+    }
+    .hint a{ color: var(--link); font-weight: 700; }
+
+    .footer{
+      margin-top: 12px;
+      text-align:center;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    .hidden{ display:none !important; }
+
+    /* Central de Ajuda (canto inferior direito) */
+    .help{
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 50;
+    }
+    .help-fab{
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1px solid rgba(148,163,184,.7);
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 8px 18px rgba(0,0,0,.20);
+      cursor: pointer;
+      font-weight: 800;
+      color: #111827;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      line-height: 1;
+    }
+    .help-fab:hover{
+      transform: translateY(-1px);
+    }
+
+    .help-pop{
+      position:absolute;
+      right: 0;
+      bottom: 44px;
+      width: 260px;
+      background: rgba(255,255,255,.97);
+      border: 1px solid rgba(148,163,184,.45);
+      border-radius: 12px;
+      box-shadow: 0 18px 35px rgba(0,0,0,.22);
+      padding: 12px;
+    }
+    .help-pop h4{
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #0f172a;
+    }
+    .help-pop p{
+      font-size: 12px;
+      color: #475569;
+      margin-bottom: 10px;
+      line-height: 1.35;
+    }
+    .help-actions{
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .help-actions a{
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(148,163,184,.45);
+      background: rgba(15,23,42,.03);
+      text-decoration:none;
+      color: #0f172a;
+    }
+    .help-actions a:hover{
+      border-color: rgba(47,125,120,.5);
+      box-shadow: 0 0 0 3px rgba(47,125,120,.12);
+    }
+
+    /* Mobile: respira */
+    @media (max-width: 420px){
+      .auth-card{ padding: 28px 20px 18px; }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="auth-card" role="main">
+    <div class="brand" aria-label="Athos">
+      <img class="brand-logo" src="./assets/athos-logo.png" alt="Athos" />
+    </div>
+
+    <div id="alertBox" class="alert" role="alert" aria-live="polite"></div>
+
+    <!-- =========================
+         VIEW: LOGIN
+    ========================== -->
+    <section id="view-login">
+      <h1 class="title">Bem-vindo ao Athos</h1>
+      <p class="subtitle">Inteligência em Negócios e Editais</p>
+
+      <form id="loginForm" autocomplete="on">
+        <div class="field">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" type="email" name="email" placeholder="Digite seu email" required />
+        </div>
+
+        <div class="field">
+          <label for="loginPass">Senha</label>
+          <div class="password-wrap">
+            <input id="loginPass" type="password" name="senha" placeholder="Digite sua senha" minlength="6" maxlength="64" required />
+            <button type="button" class="eye-btn" aria-label="Mostrar/ocultar senha" data-toggle="password" data-target="loginPass">
+              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="remember">
+            <input type="checkbox" id="rememberMe" />
+            Lembrar-me
+          </label>
+
+          <a class="link" id="linkForgot" href="javascript:void(0)">Esqueceu a senha?</a>
+        </div>
+
+        <button class="btn" type="submit" id="loginBtn">Entrar</button>
+      </form>
+
+      <div class="divider"></div>
+
+      <p class="hint">
+        Não tem uma conta? <a class="link" id="linkRegister" href="javascript:void(0)">Registre-se aqui</a>
+      </p>
+
+      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+    </section>
+
+    <!-- =========================
+         VIEW: CADASTRO
+    ========================== -->
+    <section id="view-cadastro" class="hidden">
+      <h1 class="title">Criar conta</h1>
+      <p class="subtitle">Preencha seus dados para solicitar acesso</p>
+
+      <form id="cadastroForm" autocomplete="on">
+        <div class="field">
+          <label for="cadNome">Nome</label>
+          <input id="cadNome" type="text" name="nome" placeholder="Seu nome completo" required />
+        </div>
+
+        <div class="field">
+          <label for="cadEmail">Email</label>
+          <input id="cadEmail" type="email" name="email" placeholder="Digite seu email" required />
+        </div>
+
+        <div class="field">
+          <label for="cadPass">Senha</label>
+          <div class="password-wrap">
+            <input id="cadPass" type="password" name="senha" placeholder="Crie sua senha" minlength="6" maxlength="64" required />
+            <button type="button" class="eye-btn" aria-label="Mostrar/ocultar senha" data-toggle="password" data-target="cadPass">
+              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="cadConfPass">Confirmar senha</label>
+          <div class="password-wrap">
+            <input id="cadConfPass" type="password" name="confirma_senha" placeholder="Confirme sua senha" minlength="6" maxlength="64" required />
+            <button type="button" class="eye-btn" aria-label="Mostrar/ocultar senha" data-toggle="password" data-target="cadConfPass">
+              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="cadCel">Celular</label>
+          <input id="cadCel" type="text" name="celular" placeholder="(DDD) 90000-0000" maxlength="15" required />
+        </div>
+
+        <div class="field">
+          <label for="cadCnpj">CNPJ</label>
+          <input id="cadCnpj" type="text" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" required />
+        </div>
+
+        <div class="row" style="justify-content:flex-start; margin-top: 6px;">
+          <label class="remember">
+            <input type="checkbox" name="contato_ok" required />
+            Aceito contato
+          </label>
+        </div>
+        <div class="row" style="justify-content:flex-start; margin-top: -6px;">
+          <label class="remember">
+            <input type="checkbox" name="politica_ok" required />
+            Aceito a política de dados
+          </label>
+        </div>
+
+        <button class="btn" type="submit" id="cadastroBtn">Cadastrar</button>
+
+        <div class="divider"></div>
+        <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
+      </form>
+
+      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+    </section>
+
+    <!-- =========================
+         VIEW: RECOVERY
+    ========================== -->
+    <section id="view-recovery" class="hidden">
+      <h1 class="title">Recuperar senha</h1>
+      <p class="subtitle">Enviaremos um link para redefinir sua senha</p>
+
+      <form id="recoveryForm">
+        <div class="field">
+          <label for="recEmail">Email</label>
+          <input id="recEmail" type="email" name="email" placeholder="Digite seu email" required />
+        </div>
+
+        <button class="btn" type="submit" id="recoveryBtn">Enviar link</button>
+
+        <div class="divider"></div>
+        <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
+      </form>
+
+      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+    </section>
+
+    <!-- =========================
+         VIEW: RESET
+    ========================== -->
+    <section id="view-reset" class="hidden">
+      <h1 class="title">Nova senha</h1>
+      <p class="subtitle">Crie uma nova senha para sua conta</p>
+
+      <form id="resetForm">
+        <div class="field">
+          <label for="resetPass">Nova senha</label>
+          <div class="password-wrap">
+            <input id="resetPass" type="password" name="nova_senha" placeholder="Digite sua nova senha" minlength="6" maxlength="64" required />
+            <button type="button" class="eye-btn" aria-label="Mostrar/ocultar senha" data-toggle="password" data-target="resetPass">
+              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="resetConfPass">Confirmar senha</label>
+          <div class="password-wrap">
+            <input id="resetConfPass" type="password" name="confirma_nova_senha" placeholder="Confirme sua nova senha" minlength="6" maxlength="64" required />
+            <button type="button" class="eye-btn" aria-label="Mostrar/ocultar senha" data-toggle="password" data-target="resetConfPass">
+              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <button class="btn" type="submit" id="resetBtn">Salvar</button>
+
+        <div class="divider"></div>
+        <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
+      </form>
+
+      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+    </section>
+  </main>
+
+  <!-- Central de Ajuda (ícone no canto inferior direito) -->
+  <div class="help" aria-label="Central de ajuda">
+    <button class="help-fab" id="helpFab" title="Central de ajuda" aria-haspopup="dialog" aria-expanded="false">?</button>
+
+    <div class="help-pop hidden" id="helpPop" role="dialog" aria-modal="false" aria-label="Ajuda">
+      <h4>Central de ajuda</h4>
+      <p>Se travar, a gente destrava. Abra um chamado rápido por e-mail.</p>
+      <div class="help-actions">
+        <a id="helpMail" href="#">Enviar e-mail</a>
+        <a href="javascript:void(0)" data-go="recovery">Recuperar senha</a>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ========================
+  // Helpers
+  // ========================
+  const API_BASE = (() => {
+    const host = window.location.hostname;
+    if (host.includes("localhost") || host.includes("127.0.0.1")) return "http://127.0.0.1:8000";
+    return document.querySelector('meta[name="api-base"]')?.content || "https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net";
+  })();
+
+  let alertTimeout;
+  function showAlert(msg, isError = false) {
+    const box = document.getElementById('alertBox');
+    box.style.display = 'block';
+    box.innerText = msg;
+    box.style.background = isError ? '#dc2626' : '#16a34a';
+    if (alertTimeout) clearTimeout(alertTimeout);
+    alertTimeout = setTimeout(() => { box.style.display = 'none'; }, 5000);
+  }
+
+  const views = {
+    login: document.getElementById('view-login'),
+    cadastro: document.getElementById('view-cadastro'),
+    recovery: document.getElementById('view-recovery'),
+    reset: document.getElementById('view-reset'),
+  };
+
+  function showView(name){
+    Object.values(views).forEach(v => v.classList.add('hidden'));
+    views[name]?.classList.remove('hidden');
+  }
+
+  // ========================
+  // Central de Ajuda (FAB)
+  // ========================
+  const helpFab = document.getElementById('helpFab');
+  const helpPop = document.getElementById('helpPop');
+  const helpEmail = document.querySelector('meta[name="help-email"]')?.content || "";
+  const helpMail = document.getElementById('helpMail');
+  if (helpEmail) helpMail.href = `mailto:${helpEmail}?subject=Ajuda%20-%20Athos`;
+
+  function toggleHelp(open){
+    const willOpen = (open !== undefined) ? open : helpPop.classList.contains('hidden');
+    helpPop.classList.toggle('hidden', !willOpen);
+    helpFab.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  }
+  helpFab.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleHelp();
+  });
+  document.addEventListener('click', () => toggleHelp(false));
+  helpPop.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleHelp(false); });
+
+  // ========================
+  // Password toggle (olhinho)
+  // ========================
+  document.querySelectorAll('[data-toggle="password"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-target');
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+    });
+  });
+
+  // ========================
+  // Navegação interna
+  // ========================
+  document.getElementById('linkRegister').addEventListener('click', () => showView('cadastro'));
+  document.getElementById('linkForgot').addEventListener('click', () => showView('recovery'));
+  document.querySelectorAll('[data-go]').forEach(el => {
+    el.addEventListener('click', () => showView(el.getAttribute('data-go')));
+  });
+
+  // ========================
+  // Máscaras (cadastro)
+  // ========================
+  const maskPhone = (value) => value
+    .replace(/\D/g, "")
+    .replace(/^(\d{2})(\d)/g, "($1) $2")
+    .replace(/(\d)(\d{4})$/, "$1-$2");
+
+  const maskCNPJ = (value) => value
+    .replace(/\D/g, "")
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2")
+    .substring(0, 18);
+
+  const cadCel = document.querySelector('#cadastroForm input[name="celular"]');
+  const cadCnpj = document.querySelector('#cadastroForm input[name="cnpj"]');
+  if (cadCel) cadCel.addEventListener('input', (e) => e.target.value = maskPhone(e.target.value));
+  if (cadCnpj) cadCnpj.addEventListener('input', (e) => e.target.value = maskCNPJ(e.target.value));
+
+  // ========================
+  // Remember me (salva só o email)
+  // ========================
+  const rememberMe = document.getElementById('rememberMe');
+  const loginEmail = document.getElementById('loginEmail');
+
+  try{
+    const saved = localStorage.getItem('athos_remember_email');
+    if (saved){
+      loginEmail.value = saved;
+      rememberMe.checked = true;
+    }
+  }catch(_){}
+
+  function persistEmail(){
+    try{
+      if (rememberMe.checked) localStorage.setItem('athos_remember_email', loginEmail.value || "");
+      else localStorage.removeItem('athos_remember_email');
+    }catch(_){}
+  }
+
+  // ========================
+  // URL params (verificação / reset)
+  // ========================
+  const urlParams = new URLSearchParams(window.location.search);
+
+  if (urlParams.get('verificado') === 'true') {
+    showAlert("E-mail verificado com sucesso! Faça login.");
+  }
+
+  const resetToken = urlParams.get('reset_token');
+  if (resetToken) showView('reset');
+
+  // ========================
+  // API: CADASTRO
+  // ========================
+  document.getElementById("cadastroForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('cadastroBtn');
+    const original = btn.innerText;
+    btn.disabled = true; btn.innerText = "Processando...";
+
+    const form = e.target;
+    const data = {
+      nome: form.nome.value,
+      email: form.email.value,
+      senha: form.senha.value,
+      celular: form.celular.value,
+      cnpj: form.cnpj.value,
+      contato_ok: form.contato_ok.checked,
+      politica_ok: form.politica_ok.checked
+    };
+
+    if (data.senha.length < 6 || data.senha.length > 64) {
+      showAlert("A senha deve ter entre 6 e 64 caracteres.", true);
+      btn.disabled = false; btn.innerText = original; return;
+    }
+    if (data.senha !== form.confirma_senha.value) {
+      showAlert("As senhas não conferem.", true);
+      btn.disabled = false; btn.innerText = original; return;
+    }
+
+    try{
+      const res = await fetch(`${API_BASE}/cliente/cadastro`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include"
+      });
+      const json = await res.json();
+
+      if (res.ok) {
+        showAlert("Cadastro criado! Verifique o link enviado para seu e-mail.");
+        form.reset();
+        showView('login');
+      } else {
+        let errorMsg = json.detail;
+        if (Array.isArray(errorMsg)) errorMsg = errorMsg.map(e => e.msg).join(", ");
+        showAlert(errorMsg || "Erro ao cadastrar.", true);
+      }
+    }catch(err){
+      console.error(err);
+      showAlert("Erro de conexão.", true);
+    }finally{
+      btn.disabled = false; btn.innerText = original;
+    }
+  });
+
+  // ========================
+  // API: LOGIN
+  // ========================
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    persistEmail();
+
+    const btn = document.getElementById('loginBtn');
+    const original = btn.innerText;
+    btn.disabled = true; btn.innerText = "Entrando...";
+
+    const form = e.target;
+    const data = { email: form.email.value, senha: form.senha.value };
+
+    try{
+      const res = await fetch(`${API_BASE}/cliente/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include"
+      });
+
+      const json = await res.json();
+
+      if (res.ok && json.redirect) {
+        window.location.href = json.redirect;
+      } else {
+        if (res.status === 403) showAlert("Seu e-mail ainda não foi verificado. Confira sua caixa de entrada.", true);
+        else showAlert(json.detail || "Erro de login.", true);
+      }
+    }catch(err){
+      console.error(err);
+      showAlert("Erro de conexão.", true);
+    }finally{
+      btn.disabled = false; btn.innerText = original;
+    }
+  });
+
+  // ========================
+  // API: RECOVERY
+  // ========================
+  document.getElementById("recoveryForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('recoveryBtn');
+    const original = btn.innerText;
+    btn.disabled = true; btn.innerText = "Enviando...";
+
+    try{
+      await fetch(`${API_BASE}/cliente/esqueci-senha`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e.target.email.value })
+      });
+      showAlert("Se o e-mail existir, você receberá um link de recuperação.");
+      e.target.reset();
+      setTimeout(() => showView('login'), 2500);
+    }catch(err){
+      console.error(err);
+      showAlert("Erro ao solicitar recuperação.", true);
+    }finally{
+      btn.disabled = false; btn.innerText = original;
+    }
+  });
+
+  // ========================
+  // API: RESET
+  // ========================
+  document.getElementById("resetForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!resetToken) return;
+
+    const btn = document.getElementById('resetBtn');
+    const original = btn.innerText;
+    btn.disabled = true; btn.innerText = "Salvando...";
+
+    const form = e.target;
+    if (form.nova_senha.value !== form.confirma_nova_senha.value) {
+      showAlert("As senhas não conferem.", true);
+      btn.disabled = false; btn.innerText = original; return;
+    }
+
+    try{
+      const res = await fetch(`${API_BASE}/cliente/redefinir-senha`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: resetToken, nova_senha: form.nova_senha.value })
+      });
+      const json = await res.json();
+
+      if (res.ok) {
+        showAlert("Senha redefinida com sucesso! Faça login.");
+        form.reset();
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setTimeout(() => showView('login'), 1500);
+      } else {
+        showAlert(json.detail || "Erro ao redefinir senha.", true);
+      }
+    }catch(err){
+      console.error(err);
+      showAlert("Erro de conexão.", true);
+    }finally{
+      btn.disabled = false; btn.innerText = original;
+    }
+  });
+
+  // ========================
+  // AUTO REDIRECT SE JÁ LOGADO
+  // ========================
+  (async () => {
+    try{
+      const res = await fetch(`${API_BASE}/cliente/me`, { credentials: "include" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.logado && json.redirect) window.location.href = json.redirect;
+      }
+    }catch(_){
+      // segue o jogo
+    }
+  })();
+</script>
+</body>
+</html>
