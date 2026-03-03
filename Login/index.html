@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Configuração da URL da API de Produção -->
+  <!-- ConfiguraÃ§Ã£o da URL da API de ProduÃ§Ã£o -->
   <meta name="api-base" content="https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net" />
   <!-- Opcional: URL/Email da Central de Ajuda -->
   <meta name="help-email" content="suporte@atimus.agr.br" />
@@ -11,7 +11,7 @@
 
   <style>
     :root{
-      --brand: #2f7d78;          /* botão */
+      --brand: #2f7d78;          /* botÃ£o */
       --brand-hover: #266c67;
       --link: #2f7d78;
       --text: #0f172a;
@@ -311,7 +311,7 @@
     ========================== -->
     <section id="view-login">
       <h1 class="title">Bem-vindo ao Athos</h1>
-      <p class="subtitle">Inteligência em Negócios e Editais</p>
+      <p class="subtitle">InteligÃªncia em NegÃ³cios e Editais</p>
 
       <form id="loginForm" autocomplete="on">
         <div class="field">
@@ -344,10 +344,10 @@
       <div class="divider"></div>
 
       <p class="hint">
-        Não tem uma conta? <a class="link" id="linkRegister" href="javascript:void(0)">Registre-se aqui</a>
+        NÃ£o tem uma conta? <a class="link" id="linkRegister" href="javascript:void(0)">Registre-se aqui</a>
       </p>
 
-      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer">Â© 2026 Atimus â€” InteligÃªncia em NegÃ³cios e Editais</div>
     </section>
 
     <!-- =========================
@@ -407,7 +407,7 @@
         <div class="row" style="justify-content:flex-start; margin-top: -6px;">
           <label class="remember">
             <input type="checkbox" name="politica_ok" required />
-            Aceito a política de dados
+            Aceito a polÃ­tica de dados
           </label>
         </div>
 
@@ -417,7 +417,7 @@
         <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
       </form>
 
-      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer">Â© 2026 Atimus â€” InteligÃªncia em NegÃ³cios e Editais</div>
     </section>
 
     <!-- =========================
@@ -439,7 +439,7 @@
         <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
       </form>
 
-      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer">Â© 2026 Atimus â€” InteligÃªncia em NegÃ³cios e Editais</div>
     </section>
 
     <!-- =========================
@@ -476,17 +476,17 @@
         <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
       </form>
 
-      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer">Â© 2026 Atimus â€” InteligÃªncia em NegÃ³cios e Editais</div>
     </section>
   </main>
 
-  <!-- Central de Ajuda (ícone no canto inferior direito) -->
+  <!-- Central de Ajuda (Ã­cone no canto inferior direito) -->
   <div class="help" aria-label="Central de ajuda">
     <button class="help-fab" id="helpFab" title="Central de ajuda" aria-haspopup="dialog" aria-expanded="false">?</button>
 
     <div class="help-pop hidden" id="helpPop" role="dialog" aria-modal="false" aria-label="Ajuda">
       <h4>Central de ajuda</h4>
-      <p>Se travar, a gente destrava. Abra um chamado rápido por e-mail.</p>
+      <p>Se travar, a gente destrava. Abra um chamado rÃ¡pido por e-mail.</p>
       <div class="help-actions">
         <a id="helpMail" href="#">Enviar e-mail</a>
         <a href="javascript:void(0)" data-go="recovery">Recuperar senha</a>
@@ -561,7 +561,7 @@
   });
 
   // ========================
-  // Navegação interna
+  // NavegaÃ§Ã£o interna
   // ========================
   document.getElementById('linkRegister').addEventListener('click', () => showView('cadastro'));
   document.getElementById('linkForgot').addEventListener('click', () => showView('recovery'));
@@ -570,7 +570,7 @@
   });
 
   // ========================
-  // Máscaras (cadastro)
+  // MÃ¡scaras (cadastro)
   // ========================
   const maskPhone = (value) => value
     .replace(/\D/g, "")
@@ -591,33 +591,53 @@
   if (cadCnpj) cadCnpj.addEventListener('input', (e) => e.target.value = maskCNPJ(e.target.value));
 
   // ========================
-  // Remember me (salva só o email)
+  // Remember me (email + auto redirect de sessÃ£o)
   // ========================
+  const REMEMBER_EMAIL_KEY = 'athos_remember_email';
+  const REMEMBER_SESSION_KEY = 'athos_remember_session';
   const rememberMe = document.getElementById('rememberMe');
   const loginEmail = document.getElementById('loginEmail');
 
   try{
-    const saved = localStorage.getItem('athos_remember_email');
-    if (saved){
-      loginEmail.value = saved;
-      rememberMe.checked = true;
-    }
+    const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY);
+    const rememberSession = localStorage.getItem(REMEMBER_SESSION_KEY) === '1';
+    if (savedEmail) loginEmail.value = savedEmail;
+    rememberMe.checked = rememberSession;
   }catch(_){}
 
-  function persistEmail(){
+  function persistRememberPrefs(){
     try{
-      if (rememberMe.checked) localStorage.setItem('athos_remember_email', loginEmail.value || "");
-      else localStorage.removeItem('athos_remember_email');
+      if (rememberMe.checked) {
+        localStorage.setItem(REMEMBER_EMAIL_KEY, loginEmail.value || "");
+        localStorage.setItem(REMEMBER_SESSION_KEY, '1');
+      } else {
+        localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        localStorage.removeItem(REMEMBER_SESSION_KEY);
+      }
     }catch(_){}
   }
 
   // ========================
-  // URL params (verificação / reset)
+  // URL params (verificaÃ§Ã£o / reset)
   // ========================
   const urlParams = new URLSearchParams(window.location.search);
 
   if (urlParams.get('verificado') === 'true') {
-    showAlert("E-mail verificado com sucesso! Faça login.");
+    showAlert("E-mail verificado com sucesso! FaÃ§a login.");
+  }
+
+  const loggedOutNow = urlParams.get('logged_out') === '1';
+  if (loggedOutNow) {
+    try {
+      localStorage.removeItem(REMEMBER_SESSION_KEY);
+      localStorage.removeItem(REMEMBER_EMAIL_KEY);
+    } catch (_) {}
+    rememberMe.checked = false;
+    showAlert("SessÃ£o encerrada. FaÃ§a login para continuar.");
+    urlParams.delete('logged_out');
+    const q = urlParams.toString();
+    const cleanUrl = window.location.pathname + (q ? `?${q}` : '');
+    window.history.replaceState({}, document.title, cleanUrl);
   }
 
   const resetToken = urlParams.get('reset_token');
@@ -648,7 +668,7 @@
       btn.disabled = false; btn.innerText = original; return;
     }
     if (data.senha !== form.confirma_senha.value) {
-      showAlert("As senhas não conferem.", true);
+      showAlert("As senhas nÃ£o conferem.", true);
       btn.disabled = false; btn.innerText = original; return;
     }
 
@@ -672,7 +692,7 @@
       }
     }catch(err){
       console.error(err);
-      showAlert("Erro de conexão.", true);
+      showAlert("Erro de conexÃ£o.", true);
     }finally{
       btn.disabled = false; btn.innerText = original;
     }
@@ -683,7 +703,7 @@
   // ========================
   document.getElementById("loginForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    persistEmail();
+    persistRememberPrefs();
 
     const btn = document.getElementById('loginBtn');
     const original = btn.innerText;
@@ -705,12 +725,12 @@
       if (res.ok && json.redirect) {
         window.location.href = json.redirect;
       } else {
-        if (res.status === 403) showAlert("Seu e-mail ainda não foi verificado. Confira sua caixa de entrada.", true);
+        if (res.status === 403) showAlert("Seu e-mail ainda nÃ£o foi verificado. Confira sua caixa de entrada.", true);
         else showAlert(json.detail || "Erro de login.", true);
       }
     }catch(err){
       console.error(err);
-      showAlert("Erro de conexão.", true);
+      showAlert("Erro de conexÃ£o.", true);
     }finally{
       btn.disabled = false; btn.innerText = original;
     }
@@ -731,12 +751,12 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: e.target.email.value })
       });
-      showAlert("Se o e-mail existir, você receberá um link de recuperação.");
+      showAlert("Se o e-mail existir, vocÃª receberÃ¡ um link de recuperaÃ§Ã£o.");
       e.target.reset();
       setTimeout(() => showView('login'), 2500);
     }catch(err){
       console.error(err);
-      showAlert("Erro ao solicitar recuperação.", true);
+      showAlert("Erro ao solicitar recuperaÃ§Ã£o.", true);
     }finally{
       btn.disabled = false; btn.innerText = original;
     }
@@ -755,7 +775,7 @@
 
     const form = e.target;
     if (form.nova_senha.value !== form.confirma_nova_senha.value) {
-      showAlert("As senhas não conferem.", true);
+      showAlert("As senhas nÃ£o conferem.", true);
       btn.disabled = false; btn.innerText = original; return;
     }
 
@@ -768,7 +788,7 @@
       const json = await res.json();
 
       if (res.ok) {
-        showAlert("Senha redefinida com sucesso! Faça login.");
+        showAlert("Senha redefinida com sucesso! FaÃ§a login.");
         form.reset();
         window.history.replaceState({}, document.title, window.location.pathname);
         setTimeout(() => showView('login'), 1500);
@@ -777,16 +797,22 @@
       }
     }catch(err){
       console.error(err);
-      showAlert("Erro de conexão.", true);
+      showAlert("Erro de conexÃ£o.", true);
     }finally{
       btn.disabled = false; btn.innerText = original;
     }
   });
 
   // ========================
-  // AUTO REDIRECT SE JÁ LOGADO
+  // AUTO REDIRECT SE JÃ LOGADO
   // ========================
   (async () => {
+    let shouldAutoRedirect = false;
+    try {
+      shouldAutoRedirect = localStorage.getItem(REMEMBER_SESSION_KEY) === '1';
+    } catch (_) {}
+    if (!shouldAutoRedirect) return;
+
     try{
       const res = await fetch(`${API_BASE}/cliente/me`, { credentials: "include" });
       if (res.ok) {
@@ -800,3 +826,4 @@
 </script>
 </body>
 </html>
+
