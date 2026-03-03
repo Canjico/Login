@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- ConfiguraÃ§Ã£o da URL da API de ProduÃ§Ã£o -->
+  <!-- Configuração da URL da API de Produção -->
   <meta name="api-base" content="https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net" />
   <!-- Opcional: URL/Email da Central de Ajuda -->
   <meta name="help-email" content="suporte@atimus.agr.br" />
@@ -11,7 +11,7 @@
 
   <style>
     :root{
-      --brand: #2f7d78;          /* botÃ£o */
+      --brand: #2f7d78;          /* botão */
       --brand-hover: #266c67;
       --link: #2f7d78;
       --text: #0f172a;
@@ -311,7 +311,7 @@
     ========================== -->
     <section id="view-login">
       <h1 class="title">Bem-vindo ao Athos</h1>
-      <p class="subtitle">InteligÃªncia em NegÃ³cios e Editais</p>
+      <p class="subtitle">Inteligência em Negócios e Editais</p>
 
       <form id="loginForm" autocomplete="on">
         <div class="field">
@@ -344,10 +344,10 @@
       <div class="divider"></div>
 
       <p class="hint">
-        NÃ£o tem uma conta? <a class="link" id="linkRegister" href="javascript:void(0)">Registre-se aqui</a>
+        Não tem uma conta? <a class="link" id="linkRegister" href="javascript:void(0)">Registre-se aqui</a>
       </p>
 
-      <div class="footer">Â© 2026 Atimus â€” InteligÃªncia em NegÃ³cios e Editais</div>
+      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
     </section>
 
     <!-- =========================
@@ -407,7 +407,7 @@
         <div class="row" style="justify-content:flex-start; margin-top: -6px;">
           <label class="remember">
             <input type="checkbox" name="politica_ok" required />
-            Aceito a polÃ­tica de dados
+            Aceito a política de dados
           </label>
         </div>
 
@@ -417,7 +417,7 @@
         <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
       </form>
 
-      <div class="footer">Â© 2026 Atimus â€” InteligÃªncia em NegÃ³cios e Editais</div>
+      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
     </section>
 
     <!-- =========================
@@ -439,7 +439,7 @@
         <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
       </form>
 
-      <div class="footer">Â© 2026 Atimus â€” InteligÃªncia em NegÃ³cios e Editais</div>
+      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
     </section>
 
     <!-- =========================
@@ -476,17 +476,17 @@
         <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
       </form>
 
-      <div class="footer">Â© 2026 Atimus â€” InteligÃªncia em NegÃ³cios e Editais</div>
+      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
     </section>
   </main>
 
-  <!-- Central de Ajuda (Ã­cone no canto inferior direito) -->
+  <!-- Central de Ajuda (ícone no canto inferior direito) -->
   <div class="help" aria-label="Central de ajuda">
     <button class="help-fab" id="helpFab" title="Central de ajuda" aria-haspopup="dialog" aria-expanded="false">?</button>
 
     <div class="help-pop hidden" id="helpPop" role="dialog" aria-modal="false" aria-label="Ajuda">
       <h4>Central de ajuda</h4>
-      <p>Se travar, a gente destrava. Abra um chamado rÃ¡pido por e-mail.</p>
+      <p>Se travar, a gente destrava. Abra um chamado rápido por e-mail.</p>
       <div class="help-actions">
         <a id="helpMail" href="#">Enviar e-mail</a>
         <a href="javascript:void(0)" data-go="recovery">Recuperar senha</a>
@@ -561,7 +561,7 @@
   });
 
   // ========================
-  // NavegaÃ§Ã£o interna
+  // Navegação interna
   // ========================
   document.getElementById('linkRegister').addEventListener('click', () => showView('cadastro'));
   document.getElementById('linkForgot').addEventListener('click', () => showView('recovery'));
@@ -570,7 +570,7 @@
   });
 
   // ========================
-  // MÃ¡scaras (cadastro)
+  // Máscaras (cadastro)
   // ========================
   const maskPhone = (value) => value
     .replace(/\D/g, "")
@@ -591,7 +591,7 @@
   if (cadCnpj) cadCnpj.addEventListener('input', (e) => e.target.value = maskCNPJ(e.target.value));
 
   // ========================
-  // Remember me (email + auto redirect de sessÃ£o)
+  // Remember me (email + auto redirect de sessão)
   // ========================
   const REMEMBER_EMAIL_KEY = 'athos_remember_email';
   const REMEMBER_SESSION_KEY = 'athos_remember_session';
@@ -618,12 +618,12 @@
   }
 
   // ========================
-  // URL params (verificaÃ§Ã£o / reset)
+  // URL params (verificação / reset)
   // ========================
   const urlParams = new URLSearchParams(window.location.search);
 
   if (urlParams.get('verificado') === 'true') {
-    showAlert("E-mail verificado com sucesso! FaÃ§a login.");
+    showAlert("E-mail verificado com sucesso! Faça login.");
   }
 
   const loggedOutNow = urlParams.get('logged_out') === '1';
@@ -633,7 +633,7 @@
       localStorage.removeItem(REMEMBER_EMAIL_KEY);
     } catch (_) {}
     rememberMe.checked = false;
-    showAlert("SessÃ£o encerrada. FaÃ§a login para continuar.");
+    showAlert("Sessão encerrada. Faça login para continuar.");
     urlParams.delete('logged_out');
     const q = urlParams.toString();
     const cleanUrl = window.location.pathname + (q ? `?${q}` : '');
@@ -642,6 +642,34 @@
 
   const resetToken = urlParams.get('reset_token');
   if (resetToken) showView('reset');
+
+  function resolvePostLoginRedirect(baseRedirect, token = "") {
+    let target = baseRedirect || "";
+    const rawNext = urlParams.get('next');
+
+    if (rawNext) {
+      try {
+        const nextUrl = new URL(rawNext, window.location.origin);
+        const fallbackUrl = new URL(baseRedirect, window.location.origin);
+        const isSamePortalOrigin = nextUrl.origin === fallbackUrl.origin;
+        const isLocal = ['localhost', '127.0.0.1'].includes(nextUrl.hostname);
+
+        if (isSamePortalOrigin || isLocal) {
+          target = nextUrl.toString();
+        }
+      } catch (_) {
+        // ignora next inválido e mantém fallback
+      }
+    }
+
+    try {
+      const url = new URL(target, window.location.origin);
+      if (token) url.searchParams.set('token', token);
+      return url.toString();
+    } catch (_) {
+      return target;
+    }
+  }
 
   // ========================
   // API: CADASTRO
@@ -668,7 +696,7 @@
       btn.disabled = false; btn.innerText = original; return;
     }
     if (data.senha !== form.confirma_senha.value) {
-      showAlert("As senhas nÃ£o conferem.", true);
+      showAlert("As senhas não conferem.", true);
       btn.disabled = false; btn.innerText = original; return;
     }
 
@@ -692,7 +720,7 @@
       }
     }catch(err){
       console.error(err);
-      showAlert("Erro de conexÃ£o.", true);
+      showAlert("Erro de conexão.", true);
     }finally{
       btn.disabled = false; btn.innerText = original;
     }
@@ -723,14 +751,15 @@
       const json = await res.json();
 
       if (res.ok && json.redirect) {
-        window.location.href = json.redirect;
+        const redirectUrl = resolvePostLoginRedirect(json.redirect, json.token);
+        window.location.href = redirectUrl;
       } else {
-        if (res.status === 403) showAlert("Seu e-mail ainda nÃ£o foi verificado. Confira sua caixa de entrada.", true);
+        if (res.status === 403) showAlert("Seu e-mail ainda não foi verificado. Confira sua caixa de entrada.", true);
         else showAlert(json.detail || "Erro de login.", true);
       }
     }catch(err){
       console.error(err);
-      showAlert("Erro de conexÃ£o.", true);
+      showAlert("Erro de conexão.", true);
     }finally{
       btn.disabled = false; btn.innerText = original;
     }
@@ -751,12 +780,12 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: e.target.email.value })
       });
-      showAlert("Se o e-mail existir, vocÃª receberÃ¡ um link de recuperaÃ§Ã£o.");
+      showAlert("Se o e-mail existir, você receberá um link de recuperação.");
       e.target.reset();
       setTimeout(() => showView('login'), 2500);
     }catch(err){
       console.error(err);
-      showAlert("Erro ao solicitar recuperaÃ§Ã£o.", true);
+      showAlert("Erro ao solicitar recuperação.", true);
     }finally{
       btn.disabled = false; btn.innerText = original;
     }
@@ -775,7 +804,7 @@
 
     const form = e.target;
     if (form.nova_senha.value !== form.confirma_nova_senha.value) {
-      showAlert("As senhas nÃ£o conferem.", true);
+      showAlert("As senhas não conferem.", true);
       btn.disabled = false; btn.innerText = original; return;
     }
 
@@ -788,7 +817,7 @@
       const json = await res.json();
 
       if (res.ok) {
-        showAlert("Senha redefinida com sucesso! FaÃ§a login.");
+        showAlert("Senha redefinida com sucesso! Faça login.");
         form.reset();
         window.history.replaceState({}, document.title, window.location.pathname);
         setTimeout(() => showView('login'), 1500);
@@ -797,14 +826,14 @@
       }
     }catch(err){
       console.error(err);
-      showAlert("Erro de conexÃ£o.", true);
+      showAlert("Erro de conexão.", true);
     }finally{
       btn.disabled = false; btn.innerText = original;
     }
   });
 
   // ========================
-  // AUTO REDIRECT SE JÃ LOGADO
+  // AUTO REDIRECT SE JÁ LOGADO
   // ========================
   (async () => {
     let shouldAutoRedirect = false;
