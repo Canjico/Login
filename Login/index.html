@@ -551,12 +551,19 @@
   // ========================
   // Password toggle (olhinho)
   // ========================
+  const eyeOpenSvg = `<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>`;
+  const eyeClosedSvg = `<svg viewBox="0 0 24 24"><path d="M3 3l18 18"></path><path d="M10.58 10.58a2 2 0 0 0 2.84 2.84"></path><path d="M9.88 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.7 21.7 0 0 1-5.08 5.92"></path><path d="M6.61 6.61A21.68 21.68 0 0 0 1 12s4 8 11 8a10.94 10.94 0 0 0 5.39-1.39"></path></svg>`;
   document.querySelectorAll('[data-toggle="password"]').forEach(btn => {
     btn.addEventListener('click', () => {
       const targetId = btn.getAttribute('data-target');
       const input = document.getElementById(targetId);
       if (!input) return;
-      input.type = input.type === 'password' ? 'text' : 'password';
+      const willShow = input.type === 'password';
+      input.type = willShow ? 'text' : 'password';
+
+      if (targetId === 'loginPass') {
+        btn.innerHTML = willShow ? eyeClosedSvg : eyeOpenSvg;
+      }
     });
   });
 
