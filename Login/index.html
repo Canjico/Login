@@ -27,12 +27,13 @@
     body{
       min-height:100vh;
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       justify-content:center;
       padding:24px;
       color: var(--text);
       position:relative;
-      overflow:hidden;
+      overflow-x:hidden;
+      overflow-y:auto;
       background: #0b1220;
     }
 
@@ -133,8 +134,8 @@
       box-shadow: 0 0 0 3px rgba(47,125,120,.15);
     }
 
-    #loginPass::-ms-reveal,
-    #loginPass::-ms-clear{
+    input[type="password"]::-ms-reveal,
+    input[type="password"]::-ms-clear{
       display:none;
     }
 
