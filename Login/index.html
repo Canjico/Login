@@ -567,9 +567,7 @@
       const willShow = input.type === 'password';
       input.type = willShow ? 'text' : 'password';
 
-      if (targetId === 'loginPass') {
-        btn.innerHTML = willShow ? eyeClosedSvg : eyeOpenSvg;
-      }
+      btn.innerHTML = willShow ? eyeClosedSvg : eyeOpenSvg;
     });
   });
 
