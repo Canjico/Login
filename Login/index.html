@@ -8,6 +8,9 @@
   <!-- Opcional: URL/Email da Central de Ajuda -->
   <meta name="help-email" content="suporte@atimus.agr.br" />
   <title>Athos | Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
   <style>
     :root{
@@ -22,7 +25,7 @@
       --radius: 16px;
     }
 
-    *{ box-sizing:border-box; margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; }
+    *{ box-sizing:border-box; margin:0; padding:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
 
     body{
       min-height:100vh;
@@ -654,22 +657,45 @@
   const resetToken = urlParams.get('reset_token');
   if (resetToken) showView('reset');
 
+  const POST_LOGIN_DEFAULT = "https://atimus.agr.br/athos/editais/";
+  const POST_LOGIN_PREFIX = "/athos/editais";
+
+  function isAllowedPostLoginUrl(url) {
+    if (!url) return false;
+
+    const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
+    const isAtimusHost = ['atimus.agr.br', 'www.atimus.agr.br'].includes(url.hostname);
+    const isAllowedHost = isLocalHost || isAtimusHost;
+    const isAllowedPath = String(url.pathname || "").startsWith(POST_LOGIN_PREFIX);
+
+    return isAllowedHost && isAllowedPath;
+  }
+
   function resolvePostLoginRedirect(baseRedirect, token = "") {
-    let target = baseRedirect || "";
+    const localFallback = `${window.location.origin}${POST_LOGIN_PREFIX}/`;
+    let target = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+      ? localFallback
+      : POST_LOGIN_DEFAULT;
+
     const rawNext = urlParams.get('next');
 
     if (rawNext) {
       try {
         const nextUrl = new URL(rawNext, window.location.origin);
-        const fallbackUrl = new URL(baseRedirect, window.location.origin);
-        const isSamePortalOrigin = nextUrl.origin === fallbackUrl.origin;
-        const isLocal = ['localhost', '127.0.0.1'].includes(nextUrl.hostname);
-
-        if (isSamePortalOrigin || isLocal) {
+        if (isAllowedPostLoginUrl(nextUrl)) {
           target = nextUrl.toString();
         }
       } catch (_) {
         // ignora next inválido e mantém fallback
+      }
+    } else if (baseRedirect) {
+      try {
+        const baseUrl = new URL(baseRedirect, window.location.origin);
+        if (isAllowedPostLoginUrl(baseUrl)) {
+          target = baseUrl.toString();
+        }
+      } catch (_) {
+        // ignora redirect inválido do backend
       }
     }
 
@@ -761,12 +787,15 @@
 
       const json = await res.json();
 
-      if (res.ok && json.redirect) {
-        const redirectUrl = resolvePostLoginRedirect(json.redirect, json.token);
+      if (res.ok) {
+        const redirectUrl = resolvePostLoginRedirect(json && json.redirect, json && json.token);
         window.location.href = redirectUrl;
       } else {
-        if (res.status === 403) showAlert("Seu e-mail ainda não foi verificado. Confira sua caixa de entrada.", true);
-        else showAlert(json.detail || "Erro de login.", true);
+        if (res.status === 403) {
+          showAlert(json.detail || "Acesso negado.", true);
+        } else {
+          showAlert(json.detail || "Erro de login.", true);
+        }
       }
     }catch(err){
       console.error(err);
@@ -857,7 +886,10 @@
       const res = await fetch(`${API_BASE}/cliente/me`, { credentials: "include" });
       if (res.ok) {
         const json = await res.json();
-        if (json.logado && json.redirect) window.location.href = json.redirect;
+        if (json.logado) {
+          const redirectUrl = resolvePostLoginRedirect(json && json.redirect, json && json.token);
+          window.location.href = redirectUrl;
+        }
       }
     }catch(_){
       // segue o jogo
