@@ -352,80 +352,7 @@
 
       <div class="divider"></div>
 
-      <p class="hint">
-        Não tem uma conta? <a class="link" id="linkRegister" href="javascript:void(0)">Registre-se aqui</a>
-      </p>
-
-      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
-    </section>
-
-    <!-- =========================
-         VIEW: CADASTRO
-    ========================== -->
-    <section id="view-cadastro" class="hidden">
-      <h1 class="title">Criar conta</h1>
-      <p class="subtitle">Preencha seus dados para solicitar acesso</p>
-
-      <form id="cadastroForm" autocomplete="on">
-        <div class="field">
-          <label for="cadNome">Nome</label>
-          <input id="cadNome" type="text" name="nome" placeholder="Seu nome completo" required />
-        </div>
-
-        <div class="field">
-          <label for="cadEmail">Email</label>
-          <input id="cadEmail" type="email" name="email" placeholder="Digite seu email" required />
-        </div>
-
-        <div class="field">
-          <label for="cadPass">Senha</label>
-          <div class="password-wrap">
-            <input id="cadPass" type="password" name="senha" placeholder="Crie sua senha" minlength="6" maxlength="64" required />
-            <button type="button" class="eye-btn" aria-label="Mostrar/ocultar senha" data-toggle="password" data-target="cadPass">
-              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>
-            </button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="cadConfPass">Confirmar senha</label>
-          <div class="password-wrap">
-            <input id="cadConfPass" type="password" name="confirma_senha" placeholder="Confirme sua senha" minlength="6" maxlength="64" required />
-            <button type="button" class="eye-btn" aria-label="Mostrar/ocultar senha" data-toggle="password" data-target="cadConfPass">
-              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>
-            </button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="cadCel">Celular</label>
-          <input id="cadCel" type="text" name="celular" placeholder="(DDD) 90000-0000" maxlength="15" required />
-        </div>
-
-        <div class="field">
-          <label for="cadCnpj">CNPJ</label>
-          <input id="cadCnpj" type="text" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" required />
-        </div>
-
-        <div class="row" style="justify-content:flex-start; margin-top: 6px;">
-          <label class="remember">
-            <input type="checkbox" name="contato_ok" required />
-            Aceito contato
-          </label>
-        </div>
-        <div class="row" style="justify-content:flex-start; margin-top: -6px;">
-          <label class="remember">
-            <input type="checkbox" name="politica_ok" required />
-            Aceito a política de dados
-          </label>
-        </div>
-
-        <button class="btn" type="submit" id="cadastroBtn">Cadastrar</button>
-
-        <div class="divider"></div>
-        <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
-      </form>
-
+      <p class="hint">Novas contas são criadas somente pela administração.</p>
       <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
     </section>
 
@@ -525,7 +452,6 @@
 
   const views = {
     login: document.getElementById('view-login'),
-    cadastro: document.getElementById('view-cadastro'),
     recovery: document.getElementById('view-recovery'),
     reset: document.getElementById('view-reset'),
   };
@@ -577,32 +503,10 @@
   // ========================
   // Navegação interna
   // ========================
-  document.getElementById('linkRegister').addEventListener('click', () => showView('cadastro'));
   document.getElementById('linkForgot').addEventListener('click', () => showView('recovery'));
   document.querySelectorAll('[data-go]').forEach(el => {
     el.addEventListener('click', () => showView(el.getAttribute('data-go')));
   });
-
-  // ========================
-  // Máscaras (cadastro)
-  // ========================
-  const maskPhone = (value) => value
-    .replace(/\D/g, "")
-    .replace(/^(\d{2})(\d)/g, "($1) $2")
-    .replace(/(\d)(\d{4})$/, "$1-$2");
-
-  const maskCNPJ = (value) => value
-    .replace(/\D/g, "")
-    .replace(/^(\d{2})(\d)/, "$1.$2")
-    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/\.(\d{3})(\d)/, ".$1/$2")
-    .replace(/(\d{4})(\d)/, "$1-$2")
-    .substring(0, 18);
-
-  const cadCel = document.querySelector('#cadastroForm input[name="celular"]');
-  const cadCnpj = document.querySelector('#cadastroForm input[name="cnpj"]');
-  if (cadCel) cadCel.addEventListener('input', (e) => e.target.value = maskPhone(e.target.value));
-  if (cadCnpj) cadCnpj.addEventListener('input', (e) => e.target.value = maskCNPJ(e.target.value));
 
   // ========================
   // Remember me (email + auto redirect de sessão)
@@ -707,61 +611,6 @@
       return target;
     }
   }
-
-  // ========================
-  // API: CADASTRO
-  // ========================
-  document.getElementById("cadastroForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('cadastroBtn');
-    const original = btn.innerText;
-    btn.disabled = true; btn.innerText = "Processando...";
-
-    const form = e.target;
-    const data = {
-      nome: form.nome.value,
-      email: form.email.value,
-      senha: form.senha.value,
-      celular: form.celular.value,
-      cnpj: form.cnpj.value,
-      contato_ok: form.contato_ok.checked,
-      politica_ok: form.politica_ok.checked
-    };
-
-    if (data.senha.length < 6 || data.senha.length > 64) {
-      showAlert("A senha deve ter entre 6 e 64 caracteres.", true);
-      btn.disabled = false; btn.innerText = original; return;
-    }
-    if (data.senha !== form.confirma_senha.value) {
-      showAlert("As senhas não conferem.", true);
-      btn.disabled = false; btn.innerText = original; return;
-    }
-
-    try{
-      const res = await fetch(`${API_BASE}/cliente/cadastro`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include"
-      });
-      const json = await res.json();
-
-      if (res.ok) {
-        showAlert("Cadastro criado! Verifique o link enviado para seu e-mail.");
-        form.reset();
-        showView('login');
-      } else {
-        let errorMsg = json.detail;
-        if (Array.isArray(errorMsg)) errorMsg = errorMsg.map(e => e.msg).join(", ");
-        showAlert(errorMsg || "Erro ao cadastrar.", true);
-      }
-    }catch(err){
-      console.error(err);
-      showAlert("Erro de conexão.", true);
-    }finally{
-      btn.disabled = false; btn.innerText = original;
-    }
-  });
 
   // ========================
   // API: LOGIN
