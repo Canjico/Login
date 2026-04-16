@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -234,6 +234,25 @@
       color: #94a3b8;
     }
 
+    .footer-legal{
+      margin-top: 8px;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .footer-legal a{
+      color: var(--link);
+      text-decoration:none;
+      font-weight:600;
+    }
+    .footer-legal a:hover{
+      text-decoration: underline;
+    }
+
     .hidden{ display:none !important; }
 
     /* Central de Ajuda (canto inferior direito) */
@@ -327,8 +346,8 @@
 
       <form id="loginForm" autocomplete="on">
         <div class="field">
-          <label for="loginEmail">Email</label>
-          <input id="loginEmail" type="email" name="email" placeholder="Digite seu email" required />
+          <label for="loginEmail">E-mail</label>
+          <input id="loginEmail" type="email" name="email" placeholder="Digite seu e-mail" required />
         </div>
 
         <div class="field">
@@ -356,7 +375,12 @@
       <div class="divider"></div>
 
       <p class="hint">Novas contas são criadas somente pela administração.</p>
-      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer">&copy; 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer-legal">
+        <a href="https://atimus.agr.br/athos/editais/termos-de-uso" target="_blank" rel="noopener noreferrer">Termos de Uso</a>
+        <span aria-hidden="true">|</span>
+        <a href="https://atimus.agr.br/athos/editais/politica-de-privacidade" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>
+      </div>
     </section>
 
     <!-- =========================
@@ -368,8 +392,8 @@
 
       <form id="recoveryForm">
         <div class="field">
-          <label for="recEmail">Email</label>
-          <input id="recEmail" type="email" name="email" placeholder="Digite seu email" required />
+          <label for="recEmail">E-mail</label>
+          <input id="recEmail" type="email" name="email" placeholder="Digite seu e-mail" required />
         </div>
 
         <button class="btn" type="submit" id="recoveryBtn">Enviar link</button>
@@ -378,7 +402,12 @@
         <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
       </form>
 
-      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer">&copy; 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer-legal">
+        <a href="https://atimus.agr.br/athos/editais/termos-de-uso" target="_blank" rel="noopener noreferrer">Termos de Uso</a>
+        <span aria-hidden="true">|</span>
+        <a href="https://atimus.agr.br/athos/editais/politica-de-privacidade" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>
+      </div>
     </section>
 
     <!-- =========================
@@ -415,7 +444,12 @@
         <p class="hint"><a class="link" href="javascript:void(0)" data-go="login">Voltar para login</a></p>
       </form>
 
-      <div class="footer">© 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer">&copy; 2026 Atimus — Inteligência em Negócios e Editais</div>
+      <div class="footer-legal">
+        <a href="https://atimus.agr.br/athos/editais/termos-de-uso" target="_blank" rel="noopener noreferrer">Termos de Uso</a>
+        <span aria-hidden="true">|</span>
+        <a href="https://atimus.agr.br/athos/editais/politica-de-privacidade" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>
+      </div>
     </section>
   </main>
 
@@ -442,12 +476,62 @@
     if (host.includes("localhost") || host.includes("127.0.0.1")) return "http://127.0.0.1:8000";
     return document.querySelector('meta[name="api-base"]')?.content || "https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net";
   })();
+  const CLIENTE_TOKEN_KEY = 'cliente_token';
+  const PASSWORD_CHANGE_CONTEXT_KEY = 'athos_password_change_context';
+  let authRedirectInProgress = false;
+
+  function debugAuth(event, details) {
+    // DEBUG_AUTH
+    if (details === undefined) {
+      console.debug(`[DEBUG_AUTH][Login] ${event}`);
+      return;
+    }
+    // DEBUG_AUTH
+    console.debug(`[DEBUG_AUTH][Login] ${event}`, details);
+  }
+
+  function toAbsoluteUrl(target) {
+    try {
+      return new URL(String(target || ''), window.location.origin).toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function redirectWithGuard(target, reason, { replace = false, allowSameUrl = false } = {}) {
+    const resolvedTarget = toAbsoluteUrl(target);
+    if (!resolvedTarget) {
+      debugAuth('redirect_cancelled_invalid_target', { reason, target });
+      return false;
+    }
+
+    const currentUrl = toAbsoluteUrl(window.location.href);
+    if (!allowSameUrl && currentUrl && currentUrl === resolvedTarget) {
+      debugAuth('redirect_cancelled_same_url', { reason, target: resolvedTarget });
+      return false;
+    }
+
+    if (authRedirectInProgress) {
+      debugAuth('redirect_cancelled_already_in_progress', { reason, target: resolvedTarget });
+      return false;
+    }
+
+    authRedirectInProgress = true;
+    debugAuth('redirect_dispatch', { reason, target: resolvedTarget, replace });
+    if (replace) {
+      window.location.replace(resolvedTarget);
+    } else {
+      window.location.href = resolvedTarget;
+    }
+    return true;
+  }
 
   let alertTimeout;
   function showAlert(msg, isError = false) {
     const box = document.getElementById('alertBox');
+    if (!box) return;
     box.style.display = 'block';
-    box.innerText = msg;
+    box.innerText = String(msg || '').trim();
     box.style.background = isError ? '#dc2626' : '#16a34a';
     if (alertTimeout) clearTimeout(alertTimeout);
     alertTimeout = setTimeout(() => { box.style.display = 'none'; }, 5000);
@@ -459,9 +543,316 @@
     reset: document.getElementById('view-reset'),
   };
 
-  function showView(name){
-    Object.values(views).forEach(v => v.classList.add('hidden'));
+  function showView(name) {
+    Object.values(views).forEach((v) => v && v.classList.add('hidden'));
     views[name]?.classList.remove('hidden');
+  }
+
+  async function safeReadJsonResponse(res) {
+    const ct = (res?.headers?.get('content-type') || '').toLowerCase();
+    if (!ct.includes('application/json')) return {};
+    try {
+      const json = await res.json();
+      return (json && typeof json === 'object') ? json : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function normalizeComparableText(value = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      return raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    } catch (_) {
+      return raw.toLowerCase();
+    }
+  }
+
+  function extractApiErrorMessage(data, fallback = '') {
+    if (!data || typeof data !== 'object') return fallback;
+    if (typeof data.detail === 'string' && data.detail.trim()) return data.detail;
+    if (data.detail && typeof data.detail === 'object') {
+      if (typeof data.detail.detail === 'string' && data.detail.detail.trim()) return data.detail.detail;
+      if (typeof data.detail.msg === 'string' && data.detail.msg.trim()) return data.detail.msg;
+    }
+    if (typeof data.msg === 'string' && data.msg.trim()) return data.msg;
+    return fallback;
+  }
+
+  function isTruthyLike(value) {
+    if (value === true || value === 1) return true;
+    if (typeof value === 'string') {
+      const normalized = normalizeComparableText(value);
+      return normalized === 'true' || normalized === '1' || normalized === 'sim';
+    }
+    return false;
+  }
+
+  function isPasswordChangeRequiredPayload(data) {
+    if (!data || typeof data !== 'object') return false;
+
+    const code = String(
+      data.code ||
+      data.auth_code ||
+      (data.detail && typeof data.detail === 'object' ? data.detail.code : '')
+    ).trim().toUpperCase();
+
+    if (
+      code === 'PASSWORD_CHANGE_REQUIRED' ||
+      code === 'FIRST_ACCESS_PASSWORD_CHANGE_REQUIRED' ||
+      code === 'PASSWORD_RESET_REQUIRED' ||
+      code === 'FORCE_PASSWORD_CHANGE' ||
+      code === 'FIRST_LOGIN_PASSWORD_CHANGE_REQUIRED'
+    ) {
+      return true;
+    }
+
+    const detail = data.detail && typeof data.detail === 'object' ? data.detail : {};
+    const flags = [
+      data.password_change_required,
+      data.must_change_password,
+      data.temporary_password,
+      data.forcar_troca_senha,
+      data.force_password_change,
+      data.first_access,
+      data.first_login,
+      data.password_reset_required,
+      data.requires_password_reset,
+      data.must_reset_password,
+      data.need_password_change,
+      detail.password_change_required,
+      detail.must_change_password,
+      detail.temporary_password,
+      detail.forcar_troca_senha,
+      detail.force_password_change,
+      detail.first_access,
+      detail.first_login,
+      detail.password_reset_required,
+      detail.requires_password_reset,
+      detail.must_reset_password,
+      detail.need_password_change,
+    ];
+    if (flags.some(isTruthyLike)) {
+      return true;
+    }
+
+    const normalizedMessage = normalizeComparableText(extractApiErrorMessage(data, ''));
+    return (
+      normalizedMessage.includes('troca de senha obrigatoria') ||
+      normalizedMessage.includes('obrigatorio trocar senha') ||
+      normalizedMessage.includes('senha deve ser alterada') ||
+      normalizedMessage.includes('password change required') ||
+      normalizedMessage.includes('must change password') ||
+      normalizedMessage.includes('force password change') ||
+      normalizedMessage.includes('first access password change required')
+    );
+  }
+
+  function extractPasswordChangeToken(data) {
+    if (!data || typeof data !== 'object') return '';
+    const detail = data.detail && typeof data.detail === 'object' ? data.detail : {};
+    const nested = data.data && typeof data.data === 'object' ? data.data : {};
+    const candidates = [
+      data.reset_token,
+      data.password_reset_token,
+      data.password_change_token,
+      data.token_redefinicao,
+      data.token_redefinir_senha,
+      data.resetToken,
+      data.passwordResetToken,
+      data.passwordChangeToken,
+      data.tokenRedefinicao,
+      data.tokenRedefinirSenha,
+      detail.reset_token,
+      detail.password_reset_token,
+      detail.password_change_token,
+      detail.token_redefinicao,
+      detail.token_redefinir_senha,
+      detail.resetToken,
+      detail.passwordResetToken,
+      detail.passwordChangeToken,
+      detail.tokenRedefinicao,
+      detail.tokenRedefinirSenha,
+      nested.reset_token,
+      nested.password_reset_token,
+      nested.password_change_token,
+      nested.token_redefinicao,
+      nested.token_redefinir_senha,
+      nested.resetToken,
+      nested.passwordResetToken,
+      nested.passwordChangeToken,
+      nested.tokenRedefinicao,
+      nested.tokenRedefinirSenha,
+    ];
+    for (const value of candidates) {
+      const token = String(value || '').trim();
+      if (token) return token;
+    }
+    return '';
+  }
+
+  function extractAuthToken(data) {
+    if (!data || typeof data !== 'object') return '';
+    const detail = data.detail && typeof data.detail === 'object' ? data.detail : {};
+    const nested = data.data && typeof data.data === 'object' ? data.data : {};
+    const user = data.user && typeof data.user === 'object' ? data.user : {};
+    const candidates = [
+      data.token,
+      data.access_token,
+      data.cliente_token,
+      data.jwt,
+      data.auth_token,
+      data.accessToken,
+      data.clienteToken,
+      data.authToken,
+      detail.token,
+      detail.access_token,
+      detail.cliente_token,
+      detail.jwt,
+      detail.auth_token,
+      detail.accessToken,
+      detail.clienteToken,
+      detail.authToken,
+      nested.token,
+      nested.access_token,
+      nested.cliente_token,
+      nested.jwt,
+      nested.auth_token,
+      nested.accessToken,
+      nested.clienteToken,
+      nested.authToken,
+      user.token,
+      user.access_token,
+      user.accessToken,
+      user.cliente_token,
+      user.clienteToken,
+    ];
+
+    for (const value of candidates) {
+      const token = String(value || '').trim();
+      if (token) return token;
+    }
+    return '';
+  }
+
+  function extractTokenFromHeaders(res) {
+    if (!res || !res.headers) return '';
+    const headerCandidates = [
+      res.headers.get('x-cliente-token'),
+      res.headers.get('x-access-token'),
+      res.headers.get('x-auth-token'),
+      res.headers.get('authorization'),
+    ];
+    for (const value of headerCandidates) {
+      const raw = String(value || '').trim();
+      if (!raw) continue;
+      const bearerMatch = raw.match(/^Bearer\s+(.+)$/i);
+      const token = String(bearerMatch ? bearerMatch[1] : raw).trim();
+      if (token) return token;
+    }
+    return '';
+  }
+
+  function extractAuthTokenFromResponse(res, data) {
+    return extractAuthToken(data) || extractTokenFromHeaders(res);
+  }
+
+  function readStoredClienteToken() {
+    try {
+      const localToken = localStorage.getItem(CLIENTE_TOKEN_KEY);
+      if (localToken) return localToken;
+    } catch (_) {}
+
+    try {
+      const sessionToken = sessionStorage.getItem(CLIENTE_TOKEN_KEY);
+      if (sessionToken) return sessionToken;
+    } catch (_) {}
+
+    return '';
+  }
+
+  function persistClienteToken(tokenValue, { remember = false } = {}) {
+    const token = String(tokenValue || '').trim();
+    if (!token) return false;
+
+    let saved = false;
+
+    try {
+      sessionStorage.setItem(CLIENTE_TOKEN_KEY, token);
+      saved = true;
+    } catch (_) {}
+
+    try {
+      if (remember) {
+        localStorage.setItem(CLIENTE_TOKEN_KEY, token);
+      } else {
+        localStorage.removeItem(CLIENTE_TOKEN_KEY);
+      }
+      saved = true;
+    } catch (_) {}
+
+    return saved;
+  }
+
+  function readPasswordChangeContext() {
+    try {
+      const raw = sessionStorage.getItem(PASSWORD_CHANGE_CONTEXT_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return {};
+      const savedAt = Number(parsed.savedAt || 0);
+      if (savedAt > 0 && (Date.now() - savedAt) > (30 * 60 * 1000)) {
+        sessionStorage.removeItem(PASSWORD_CHANGE_CONTEXT_KEY);
+        return {};
+      }
+      return {
+        email: String(parsed.email || '').trim(),
+        authToken: String(parsed.authToken || '').trim(),
+        resetToken: String(parsed.resetToken || '').trim(),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function persistPasswordChangeContext({ email = '', authToken = '', resetToken = '' } = {}) {
+    const payload = {
+      email: String(email || '').trim(),
+      authToken: String(authToken || '').trim(),
+      resetToken: String(resetToken || '').trim(),
+      savedAt: Date.now(),
+    };
+
+    try {
+      if (!payload.email && !payload.authToken && !payload.resetToken) {
+        sessionStorage.removeItem(PASSWORD_CHANGE_CONTEXT_KEY);
+        return false;
+      }
+      sessionStorage.setItem(PASSWORD_CHANGE_CONTEXT_KEY, JSON.stringify(payload));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function clearPasswordChangeContext() {
+    try {
+      sessionStorage.removeItem(PASSWORD_CHANGE_CONTEXT_KEY);
+    } catch (_) {}
+  }
+
+  function appendParamsToUrl(baseUrl, params = {}) {
+    try {
+      const url = new URL(String(baseUrl || ''), window.location.origin);
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') return;
+        url.searchParams.set(String(key), String(value));
+      });
+      return url.toString();
+    } catch (_) {
+      return String(baseUrl || '');
+    }
   }
 
   // ========================
@@ -471,19 +862,21 @@
   const helpPop = document.getElementById('helpPop');
   const helpEmail = document.querySelector('meta[name="help-email"]')?.content || "";
   const helpMail = document.getElementById('helpMail');
-  if (helpEmail) helpMail.href = `mailto:${helpEmail}?subject=Ajuda%20-%20Athos`;
+  if (helpEmail && helpMail) helpMail.href = `mailto:${helpEmail}?subject=Ajuda%20-%20Athos`;
 
-  function toggleHelp(open){
+  function toggleHelp(open) {
+    if (!helpPop || !helpFab) return;
     const willOpen = (open !== undefined) ? open : helpPop.classList.contains('hidden');
     helpPop.classList.toggle('hidden', !willOpen);
     helpFab.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
   }
-  helpFab.addEventListener('click', (e) => {
+
+  helpFab?.addEventListener('click', (e) => {
     e.stopPropagation();
     toggleHelp();
   });
   document.addEventListener('click', () => toggleHelp(false));
-  helpPop.addEventListener('click', (e) => e.stopPropagation());
+  helpPop?.addEventListener('click', (e) => e.stopPropagation());
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleHelp(false); });
 
   // ========================
@@ -491,24 +884,30 @@
   // ========================
   const eyeOpenSvg = `<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"></path><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path></svg>`;
   const eyeClosedSvg = `<svg viewBox="0 0 24 24"><path d="M3 3l18 18"></path><path d="M10.58 10.58a2 2 0 0 0 2.84 2.84"></path><path d="M9.88 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.7 21.7 0 0 1-5.08 5.92"></path><path d="M6.61 6.61A21.68 21.68 0 0 0 1 12s4 8 11 8a10.94 10.94 0 0 0 5.39-1.39"></path></svg>`;
-  document.querySelectorAll('[data-toggle="password"]').forEach(btn => {
+  document.querySelectorAll('[data-toggle="password"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const targetId = btn.getAttribute('data-target');
       const input = document.getElementById(targetId);
       if (!input) return;
       const willShow = input.type === 'password';
       input.type = willShow ? 'text' : 'password';
-
       btn.innerHTML = willShow ? eyeClosedSvg : eyeOpenSvg;
+      btn.setAttribute('aria-label', willShow ? 'Ocultar senha' : 'Mostrar senha');
     });
   });
 
   // ========================
   // Navegação interna
   // ========================
-  document.getElementById('linkForgot').addEventListener('click', () => showView('recovery'));
-  document.querySelectorAll('[data-go]').forEach(el => {
-    el.addEventListener('click', () => showView(el.getAttribute('data-go')));
+  document.getElementById('linkForgot')?.addEventListener('click', () => showView('recovery'));
+  document.querySelectorAll('[data-go]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const target = el.getAttribute('data-go');
+      if (target === 'login') {
+        clearPasswordChallengeFlow({ clearUrlParams: true });
+      }
+      showView(target);
+    });
   });
 
   // ========================
@@ -519,32 +918,157 @@
   const rememberMe = document.getElementById('rememberMe');
   const loginEmail = document.getElementById('loginEmail');
 
-  try{
+  try {
     const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY);
     const rememberSession = localStorage.getItem(REMEMBER_SESSION_KEY) === '1';
-    if (savedEmail) loginEmail.value = savedEmail;
-    rememberMe.checked = rememberSession;
-  }catch(_){}
+    if (savedEmail && loginEmail) loginEmail.value = savedEmail;
+    if (rememberMe) rememberMe.checked = rememberSession;
+  } catch (_) {}
 
-  function persistRememberPrefs(){
-    try{
+  function persistRememberPrefs() {
+    if (!rememberMe || !loginEmail) return;
+    try {
       if (rememberMe.checked) {
-        localStorage.setItem(REMEMBER_EMAIL_KEY, loginEmail.value || "");
+        localStorage.setItem(REMEMBER_EMAIL_KEY, loginEmail.value || '');
         localStorage.setItem(REMEMBER_SESSION_KEY, '1');
       } else {
         localStorage.removeItem(REMEMBER_EMAIL_KEY);
         localStorage.removeItem(REMEMBER_SESSION_KEY);
       }
-    }catch(_){}
+    } catch (_) {}
+  }
+
+  function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+  }
+
+  async function probeSessionAfterLogin(token = '') {
+    const headers = {};
+    const probeToken = String(token || readStoredClienteToken() || '').trim();
+    if (probeToken) {
+      headers.Authorization = `Bearer ${probeToken}`;
+      headers['X-Cliente-Token'] = probeToken;
+    }
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const res = await fetch(`${API_BASE}/cliente/me`, {
+          method: 'GET',
+          credentials: 'include',
+          headers,
+        });
+        const payload = await safeReadJsonResponse(res);
+        const sessionToken = extractAuthTokenFromResponse(res, payload);
+        if (sessionToken) {
+          persistClienteToken(sessionToken, { remember: Boolean(rememberMe?.checked) });
+        }
+
+        const requiresPasswordChange = isPasswordChangeRequiredPayload(payload);
+
+        const explicitlyLoggedOut = (
+          payload &&
+          typeof payload === 'object' &&
+          Object.prototype.hasOwnProperty.call(payload, 'logado') &&
+          payload.logado === false
+        );
+
+        debugAuth('post_login_session_probe', {
+          attempt,
+          status: res.status,
+          ok: res.ok,
+          requiresPasswordChange,
+          explicitlyLoggedOut,
+          hasSessionToken: Boolean(sessionToken),
+          usedProbeToken: Boolean(probeToken),
+        });
+
+        if (requiresPasswordChange) {
+          return { ok: false, requiresPasswordChange: true, payload, res };
+        }
+
+        if (res.ok && !explicitlyLoggedOut) {
+          return { ok: true, payload, res };
+        }
+
+        if (attempt < 3 && (res.status === 401 || res.status === 403 || explicitlyLoggedOut)) {
+          await wait(180 * attempt);
+          continue;
+        }
+
+        return { ok: false, payload, res };
+      } catch (error) {
+        debugAuth('post_login_session_probe_error', {
+          attempt,
+          message: error?.message || String(error || ''),
+        });
+        if (attempt < 3) {
+          await wait(180 * attempt);
+          continue;
+        }
+        return { ok: false, networkError: true, error };
+      }
+    }
+
+    return { ok: false };
   }
 
   // ========================
-  // URL params (verificação / reset)
+  // URL params (verificação / reset / troca obrigatória)
   // ========================
   const urlParams = new URLSearchParams(window.location.search);
+  let currentResetToken = String(urlParams.get('reset_token') || '').trim();
+  const forcePasswordChangeRequested = urlParams.get('force_password_change') === '1';
+  const storedPasswordChangeContext = readPasswordChangeContext();
+  let passwordChallengeContext = {
+    email: String(storedPasswordChangeContext.email || '').trim(),
+    authToken: String(storedPasswordChangeContext.authToken || '').trim(),
+    resetToken: String(currentResetToken || storedPasswordChangeContext.resetToken || '').trim(),
+  };
+
+  function syncPasswordChallengeUrlParams({ force = false, resetToken = '' } = {}) {
+    const params = new URLSearchParams(window.location.search);
+    if (force) {
+      params.set('force_password_change', '1');
+    } else {
+      params.delete('force_password_change');
+    }
+    if (resetToken) {
+      params.set('reset_token', resetToken);
+    } else {
+      params.delete('reset_token');
+    }
+    const nextQuery = params.toString();
+    const nextUrl = window.location.pathname + (nextQuery ? `?${nextQuery}` : '');
+    window.history.replaceState({}, document.title, nextUrl);
+  }
+
+  function updatePasswordChallengeContext({ email, authToken, resetToken } = {}) {
+    if (email !== undefined) {
+      passwordChallengeContext.email = String(email || '').trim();
+    }
+    if (authToken !== undefined) {
+      passwordChallengeContext.authToken = String(authToken || '').trim();
+    }
+    if (resetToken !== undefined) {
+      passwordChallengeContext.resetToken = String(resetToken || '').trim();
+    }
+    currentResetToken = passwordChallengeContext.resetToken;
+    persistPasswordChangeContext(passwordChallengeContext);
+  }
+
+  function clearPasswordChallengeFlow({ clearUrlParams = false } = {}) {
+    passwordChallengeContext = { email: '', authToken: '', resetToken: '' };
+    currentResetToken = '';
+    clearPasswordChangeContext();
+    if (clearUrlParams) {
+      syncPasswordChallengeUrlParams({ force: false, resetToken: '' });
+    }
+  }
+
+  updatePasswordChallengeContext({ resetToken: passwordChallengeContext.resetToken });
 
   if (urlParams.get('verificado') === 'true') {
-    showAlert("E-mail verificado com sucesso! Faça login.");
+    showAlert('E-mail verificado com sucesso. Faça login.');
   }
 
   const loggedOutNow = urlParams.get('logged_out') === '1';
@@ -552,33 +1076,71 @@
     try {
       localStorage.removeItem(REMEMBER_SESSION_KEY);
       localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      localStorage.removeItem(CLIENTE_TOKEN_KEY);
     } catch (_) {}
-    rememberMe.checked = false;
-    showAlert("Sessão encerrada. Faça login para continuar.");
+    try { sessionStorage.removeItem(CLIENTE_TOKEN_KEY); } catch (_) {}
+    clearPasswordChallengeFlow();
+    if (rememberMe) rememberMe.checked = false;
+    showAlert('Sessão encerrada. Faça login para continuar.');
     urlParams.delete('logged_out');
     const q = urlParams.toString();
     const cleanUrl = window.location.pathname + (q ? `?${q}` : '');
     window.history.replaceState({}, document.title, cleanUrl);
   }
 
-  const resetToken = urlParams.get('reset_token');
-  if (resetToken) showView('reset');
-
-  const POST_LOGIN_DEFAULT = "https://atimus.agr.br/athos/editais/";
-  const POST_LOGIN_PREFIX = "/athos/editais";
-
-  function isAllowedPostLoginUrl(url) {
-    if (!url) return false;
-
-    const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
-    const isAtimusHost = ['atimus.agr.br', 'www.atimus.agr.br'].includes(url.hostname);
-    const isAllowedHost = isLocalHost || isAtimusHost;
-    const isAllowedPath = String(url.pathname || "").startsWith(POST_LOGIN_PREFIX);
-
-    return isAllowedHost && isAllowedPath;
+  if (currentResetToken) {
+    showView('reset');
+    syncPasswordChallengeUrlParams({ force: true, resetToken: currentResetToken });
+  } else {
+    showView('login');
+    if (forcePasswordChangeRequested) {
+      showAlert('Sua conta exige troca de senha no primeiro acesso.', true);
+    }
   }
 
-  function resolvePostLoginRedirect(baseRedirect, token = "") {
+  const POST_LOGIN_DEFAULT = 'https://atimus.agr.br/athos/editais/';
+  const POST_LOGIN_PREFIX = '/athos/editais';
+  const ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'atimus.agr.br', 'www.atimus.agr.br', 'login.atimus.agr.br'];
+
+  function isPasswordFlowPath(path = '') {
+    const normalized = normalizeComparableText(path).replace(/\s+/g, '');
+    if (!normalized) return false;
+    return (
+      normalized.includes('redefin') ||
+      normalized.includes('reset') ||
+      normalized.includes('trocasenha') ||
+      normalized.includes('alterarsenha') ||
+      normalized.includes('novasenha') ||
+      normalized.includes('primeiroacesso') ||
+      normalized.includes('password')
+    );
+  }
+
+  function isLikelyLoginRoute(url) {
+    if (!url) return false;
+    const host = String(url.hostname || '').toLowerCase();
+    const path = String(url.pathname || '').toLowerCase();
+    if (host === 'login.atimus.agr.br') return true;
+    return path.includes('/login') || path.includes('/signin');
+  }
+
+  function isAllowedPostLoginUrl(url, { allowPasswordFlow = false } = {}) {
+    if (!url) return false;
+
+    const host = String(url.hostname || '').toLowerCase();
+    if (!ALLOWED_HOSTS.includes(host)) return false;
+
+    const path = String(url.pathname || '');
+    if (!allowPasswordFlow) {
+      return path.startsWith(POST_LOGIN_PREFIX);
+    }
+
+    const hasPasswordFlowHint = url.searchParams.get('force_password_change') === '1' || Boolean(url.searchParams.get('reset_token'));
+    if (isPasswordFlowPath(path)) return true;
+    return hasPasswordFlowHint && isLikelyLoginRoute(url);
+  }
+
+  function resolvePostLoginRedirect(baseRedirect, token = '') {
     const localFallback = `${window.location.origin}${POST_LOGIN_PREFIX}/`;
     let target = ['localhost', '127.0.0.1'].includes(window.location.hostname)
       ? localFallback
@@ -609,118 +1171,389 @@
     try {
       const url = new URL(target, window.location.origin);
       if (token) url.searchParams.set('token', token);
-      return url.toString();
+      const resolved = url.toString();
+      debugAuth('post_login_redirect_resolved', {
+        target: resolved,
+        fromNext: Boolean(rawNext),
+        fromBackendRedirect: Boolean(baseRedirect),
+        hasToken: Boolean(token),
+      });
+      return resolved;
     } catch (_) {
+      debugAuth('post_login_redirect_resolved_raw_target', { target, hasToken: Boolean(token) });
       return target;
     }
+  }
+
+  function resolvePasswordChangeRedirect(payload = {}) {
+    const fallbackUrl = window.location.href;
+    const candidates = [
+      payload.redirect,
+      payload.next,
+      payload.password_change_url,
+      payload.reset_url,
+      payload.detail && typeof payload.detail === 'object' ? payload.detail.redirect : '',
+      payload.detail && typeof payload.detail === 'object' ? payload.detail.next : '',
+      payload.detail && typeof payload.detail === 'object' ? payload.detail.password_change_url : '',
+      payload.detail && typeof payload.detail === 'object' ? payload.detail.reset_url : '',
+    ].map((value) => String(value || '').trim()).filter(Boolean);
+
+    for (const candidate of candidates) {
+      try {
+        const parsed = new URL(candidate, window.location.origin);
+        if (isAllowedPostLoginUrl(parsed, { allowPasswordFlow: true })) {
+          return appendParamsToUrl(parsed.toString(), { force_password_change: '1' });
+        }
+      } catch (_) {
+        // ignora URL inválida
+      }
+    }
+
+    const tokenFromPayload = extractPasswordChangeToken(payload);
+    if (tokenFromPayload) {
+      return appendParamsToUrl(fallbackUrl, {
+        force_password_change: '1',
+        reset_token: tokenFromPayload,
+      });
+    }
+
+    return fallbackUrl;
+  }
+
+  function payloadHasPasswordFlowHint(payload = {}) {
+    if (extractPasswordChangeToken(payload)) return true;
+    const candidates = [
+      payload.redirect,
+      payload.next,
+      payload.password_change_url,
+      payload.reset_url,
+      payload.detail && typeof payload.detail === 'object' ? payload.detail.redirect : '',
+      payload.detail && typeof payload.detail === 'object' ? payload.detail.next : '',
+      payload.detail && typeof payload.detail === 'object' ? payload.detail.password_change_url : '',
+      payload.detail && typeof payload.detail === 'object' ? payload.detail.reset_url : '',
+    ].map((value) => String(value || '').trim()).filter(Boolean);
+
+    for (const candidate of candidates) {
+      try {
+        const parsed = new URL(candidate, window.location.origin);
+        const hasForceParam = parsed.searchParams.get('force_password_change') === '1';
+        const hasResetToken = Boolean(parsed.searchParams.get('reset_token'));
+        if (
+          hasResetToken ||
+          isPasswordFlowPath(parsed.pathname) ||
+          (hasForceParam && isLikelyLoginRoute(parsed))
+        ) {
+          return true;
+        }
+      } catch (_) {
+        // ignora URL inválida
+      }
+    }
+    return false;
+  }
+
+  function goToPasswordChangeFlow(payload = {}, { email = '', authToken = '' } = {}) {
+    const tokenFromPayload = extractPasswordChangeToken(payload);
+    const authTokenFromContext = String(
+      authToken ||
+      extractAuthToken(payload) ||
+      readStoredClienteToken() ||
+      passwordChallengeContext.authToken ||
+      ''
+    ).trim();
+
+    if (authTokenFromContext) {
+      persistClienteToken(authTokenFromContext, { remember: Boolean(rememberMe?.checked) });
+    }
+
+    updatePasswordChallengeContext({
+      email: email || loginEmail?.value || passwordChallengeContext.email || '',
+      authToken: authTokenFromContext,
+      resetToken: tokenFromPayload || '',
+    });
+
+    debugAuth('password_change_flow_requested', {
+      hasResetToken: Boolean(tokenFromPayload),
+      hasAuthToken: Boolean(authTokenFromContext),
+    });
+
+    if (!passwordChallengeContext.resetToken && !passwordChallengeContext.authToken) {
+      showView('login');
+      showAlert('Sua conta exige troca de senha no primeiro acesso.', true);
+      return;
+    }
+
+    syncPasswordChallengeUrlParams({
+      force: true,
+      resetToken: passwordChallengeContext.resetToken,
+    });
+    showView('reset');
+    showAlert('Para continuar, defina uma nova senha.', true);
   }
 
   // ========================
   // API: LOGIN
   // ========================
-  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     persistRememberPrefs();
 
     const btn = document.getElementById('loginBtn');
-    const original = btn.innerText;
-    btn.disabled = true; btn.innerText = "Entrando...";
+    const original = btn?.innerText || 'Entrar';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = 'Entrando...';
+    }
 
     const form = e.target;
     const data = { email: form.email.value, senha: form.senha.value };
+    debugAuth('login_submit', {
+      endpoint: `${API_BASE}/cliente/login`,
+      email: String(form.email.value || '').trim(),
+      rememberSession: Boolean(rememberMe?.checked),
+    });
 
-    try{
+    try {
       const res = await fetch(`${API_BASE}/cliente/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
-        credentials: "include"
+        credentials: 'include',
       });
 
-      const json = await res.json();
+      const json = await safeReadJsonResponse(res);
+      const passwordChangeRequired = isPasswordChangeRequiredPayload(json);
+      const hasPasswordFlowHint = payloadHasPasswordFlowHint(json);
+      const authToken = extractAuthTokenFromResponse(res, json);
+      const shouldForcePasswordFlow = passwordChangeRequired || (!res.ok && hasPasswordFlowHint) || (res.ok && hasPasswordFlowHint && !authToken);
+      debugAuth('login_response', {
+        status: res.status,
+        ok: res.ok,
+        passwordChangeRequired,
+        hasPasswordFlowHint,
+        hasAuthToken: Boolean(authToken),
+        shouldForcePasswordFlow,
+      });
 
       if (res.ok) {
-        const redirectUrl = resolvePostLoginRedirect(json && json.redirect, json && json.token);
-        window.location.href = redirectUrl;
-      } else {
-        if (res.status === 403) {
-          showAlert(json.detail || "Acesso negado.", true);
-        } else {
-          showAlert(json.detail || "Erro de login.", true);
+        if (shouldForcePasswordFlow) {
+          if (authToken) {
+            persistClienteToken(authToken, { remember: Boolean(rememberMe?.checked) });
+          }
+          goToPasswordChangeFlow(json, { email: data.email, authToken });
+          return;
         }
+
+        if (authToken) {
+          const tokenStored = persistClienteToken(authToken, { remember: Boolean(rememberMe?.checked) });
+          debugAuth('login_token_persisted', { tokenStored });
+          if (!tokenStored) {
+            showAlert('Não foi possível salvar a sessão no navegador.', true);
+            return;
+          }
+        } else {
+          debugAuth('login_without_token_in_payload');
+        }
+
+        const sessionProbe = await probeSessionAfterLogin(authToken);
+        if (sessionProbe?.requiresPasswordChange) {
+          goToPasswordChangeFlow(sessionProbe.payload || json, { email: data.email, authToken });
+          return;
+        }
+
+        if (!sessionProbe?.ok) {
+          const probeStatus = Number(sessionProbe?.res?.status || 0);
+          const probeMessage = extractApiErrorMessage(
+            sessionProbe?.payload,
+            'Não foi possível confirmar a sessão após o login.'
+          );
+          debugAuth('login_blocked_by_session_probe', {
+            probeStatus,
+            networkError: Boolean(sessionProbe?.networkError),
+            probeMessage,
+          });
+
+          if (sessionProbe?.networkError && authToken) {
+            debugAuth('login_probe_network_error_but_token_available', { hasAuthToken: true });
+          } else if (probeStatus === 401 || probeStatus === 403) {
+            showAlert('Login recebido, mas a sessão não foi confirmada. Tente novamente.', true);
+            return;
+          } else if (sessionProbe?.networkError) {
+            showAlert('Não foi possível confirmar a sessão por instabilidade de rede. Tente novamente.', true);
+            return;
+          } else {
+            showAlert(probeMessage, true);
+            return;
+          }
+        }
+
+        clearPasswordChallengeFlow({ clearUrlParams: true });
+        const redirectUrl = resolvePostLoginRedirect(json?.redirect, authToken || json?.token);
+        const redirected = redirectWithGuard(redirectUrl, 'login_success');
+        if (!redirected) {
+          const fallbackRedirectUrl = resolvePostLoginRedirect('', authToken || json?.token);
+          redirectWithGuard(fallbackRedirectUrl, 'login_success_fallback');
+        }
+        return;
       }
-    }catch(err){
-      console.error(err);
-      showAlert("Erro de conexão.", true);
-    }finally{
-      btn.disabled = false; btn.innerText = original;
+
+      if (shouldForcePasswordFlow) {
+        goToPasswordChangeFlow(json, { email: data.email, authToken });
+        return;
+      }
+
+      if (res.status === 401 || res.status === 403) {
+        showAlert(extractApiErrorMessage(json, 'Acesso negado.'), true);
+      } else {
+        showAlert(extractApiErrorMessage(json, 'Erro de login.'), true);
+      }
+    } catch (err) {
+      // DEBUG_AUTH
+      console.error('[DEBUG_AUTH][Login] login_request_error', err);
+      showAlert('Erro de conexão.', true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerText = original;
+      }
     }
   });
 
   // ========================
   // API: RECOVERY
   // ========================
-  document.getElementById("recoveryForm").addEventListener("submit", async (e) => {
+  document.getElementById('recoveryForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('recoveryBtn');
-    const original = btn.innerText;
-    btn.disabled = true; btn.innerText = "Enviando...";
+    const original = btn?.innerText || 'Enviar link';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = 'Enviando...';
+    }
 
-    try{
+    try {
       await fetch(`${API_BASE}/cliente/esqueci-senha`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: e.target.email.value })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: e.target.email.value }),
       });
-      showAlert("Se o e-mail existir, você receberá um link de recuperação.");
+      showAlert('Se o e-mail existir, você receberá um link de recuperação.');
       e.target.reset();
       setTimeout(() => showView('login'), 2500);
-    }catch(err){
+    } catch (err) {
       console.error(err);
-      showAlert("Erro ao solicitar recuperação.", true);
-    }finally{
-      btn.disabled = false; btn.innerText = original;
+      showAlert('Erro ao solicitar recuperação.', true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerText = original;
+      }
     }
   });
 
   // ========================
   // API: RESET
   // ========================
-  document.getElementById("resetForm").addEventListener("submit", async (e) => {
+  document.getElementById('resetForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!resetToken) return;
+    const resetToken = String(currentResetToken || passwordChallengeContext.resetToken || '').trim();
+    const authToken = String(
+      passwordChallengeContext.authToken ||
+      readStoredClienteToken() ||
+      ''
+    ).trim();
+    const useMandatoryPasswordChange = !resetToken && Boolean(authToken);
+
+    if (!resetToken && !useMandatoryPasswordChange) {
+      showAlert('Sessão de troca de senha inválida ou expirada. Faça login novamente.', true);
+      showView('login');
+      return;
+    }
 
     const btn = document.getElementById('resetBtn');
-    const original = btn.innerText;
-    btn.disabled = true; btn.innerText = "Salvando...";
+    const original = btn?.innerText || 'Salvar';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = 'Salvando...';
+    }
 
     const form = e.target;
     if (form.nova_senha.value !== form.confirma_nova_senha.value) {
-      showAlert("As senhas não conferem.", true);
-      btn.disabled = false; btn.innerText = original; return;
+      showAlert('As senhas não conferem.', true);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerText = original;
+      }
+      return;
     }
 
-    try{
-      const res = await fetch(`${API_BASE}/cliente/redefinir-senha`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: resetToken, nova_senha: form.nova_senha.value })
+    try {
+      const endpoint = useMandatoryPasswordChange
+        ? `${API_BASE}/cliente/troca-senha-obrigatoria`
+        : `${API_BASE}/cliente/redefinir-senha`;
+      const headers = { 'Content-Type': 'application/json' };
+      if (useMandatoryPasswordChange && authToken) {
+        headers.Authorization = `Bearer ${authToken}`;
+        headers['X-Cliente-Token'] = authToken;
+      }
+
+      const body = useMandatoryPasswordChange
+        ? {
+          nova_senha: form.nova_senha.value,
+          confirma_nova_senha: form.confirma_nova_senha.value,
+        }
+        : {
+          token: resetToken,
+          nova_senha: form.nova_senha.value,
+        };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        credentials: 'include',
       });
-      const json = await res.json();
+      const json = await safeReadJsonResponse(res);
 
       if (res.ok) {
-        showAlert("Senha redefinida com sucesso! Faça login.");
+        const nextAuthToken = extractAuthTokenFromResponse(res, json);
+        if (nextAuthToken) {
+          persistClienteToken(nextAuthToken, { remember: Boolean(rememberMe?.checked) });
+        }
+
         form.reset();
-        window.history.replaceState({}, document.title, window.location.pathname);
+        clearPasswordChallengeFlow({ clearUrlParams: true });
+
+        if (useMandatoryPasswordChange) {
+          showAlert('Senha atualizada com sucesso. Redirecionando...', false);
+          const redirectUrl = resolvePostLoginRedirect(json?.redirect, nextAuthToken || authToken || json?.token);
+          const redirected = redirectWithGuard(redirectUrl, 'mandatory_password_change_success');
+          if (!redirected) {
+            const fallbackRedirectUrl = resolvePostLoginRedirect('', nextAuthToken || authToken || json?.token);
+            redirectWithGuard(fallbackRedirectUrl, 'mandatory_password_change_success_fallback');
+          }
+          return;
+        }
+
+        showAlert('Senha redefinida com sucesso. Faça login.');
         setTimeout(() => showView('login'), 1500);
       } else {
-        showAlert(json.detail || "Erro ao redefinir senha.", true);
+        if (useMandatoryPasswordChange && (res.status === 401 || res.status === 403)) {
+          clearPasswordChallengeFlow({ clearUrlParams: true });
+          showView('login');
+          showAlert('Sessão expirada para troca de senha. Faça login novamente.', true);
+          return;
+        }
+        showAlert(extractApiErrorMessage(json, 'Erro ao redefinir senha.'), true);
       }
-    }catch(err){
+    } catch (err) {
       console.error(err);
-      showAlert("Erro de conexão.", true);
-    }finally{
-      btn.disabled = false; btn.innerText = original;
+      showAlert('Erro de conexão.', true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerText = original;
+      }
     }
   });
 
@@ -732,22 +1565,60 @@
     try {
       shouldAutoRedirect = localStorage.getItem(REMEMBER_SESSION_KEY) === '1';
     } catch (_) {}
-    if (!shouldAutoRedirect) return;
 
-    try{
-      const res = await fetch(`${API_BASE}/cliente/me`, { credentials: "include" });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.logado) {
-          const redirectUrl = resolvePostLoginRedirect(json && json.redirect, json && json.token);
-          window.location.href = redirectUrl;
-        }
+    const shouldCheckSession = shouldAutoRedirect || forcePasswordChangeRequested || Boolean(currentResetToken);
+    debugAuth('auto_session_check_gate', {
+      shouldAutoRedirect,
+      forcePasswordChangeRequested,
+      hasResetTokenInUrl: Boolean(currentResetToken),
+      shouldCheckSession,
+    });
+    if (!shouldCheckSession) return;
+
+    try {
+      const headers = {};
+      const storedToken = readStoredClienteToken();
+      if (storedToken) {
+        headers.Authorization = `Bearer ${storedToken}`;
+        headers['X-Cliente-Token'] = storedToken;
       }
-    }catch(_){
-      // segue o jogo
+
+      const res = await fetch(`${API_BASE}/cliente/me`, { credentials: 'include', headers });
+      debugAuth('auto_session_check_response', { status: res.status, ok: res.ok, hasStoredToken: Boolean(storedToken) });
+      if (!res.ok) return;
+
+      const json = await safeReadJsonResponse(res);
+      const tokenFromSessionCheck = extractAuthTokenFromResponse(res, json);
+      if (tokenFromSessionCheck) {
+        persistClienteToken(tokenFromSessionCheck, { remember: shouldAutoRedirect });
+      }
+
+      const mustChangePassword =
+        isPasswordChangeRequiredPayload(json) ||
+        Boolean(currentResetToken);
+      debugAuth('auto_session_check_decision', {
+        mustChangePassword,
+        shouldAutoRedirect,
+        logado: json?.logado,
+      });
+      if (mustChangePassword) {
+        goToPasswordChangeFlow(json, { authToken: tokenFromSessionCheck || storedToken });
+        return;
+      }
+
+      if (shouldAutoRedirect && json?.logado !== false) {
+        const redirectUrl = resolvePostLoginRedirect(json?.redirect, tokenFromSessionCheck || json?.token);
+        redirectWithGuard(redirectUrl, 'auto_session_redirect');
+      }
+    } catch (err) {
+      debugAuth('auto_session_check_error', {
+        message: err?.message || String(err || ''),
+      });
+      // segue o fluxo normal do login
     }
   })();
 </script>
 </body>
 </html>
+
 
