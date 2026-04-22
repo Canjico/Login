@@ -3,15 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
-  <meta name="frontend-build-stamp" content="20260422.3" />
   <!-- Configuração da URL da API de Produção -->
   <meta name="api-base" content="https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net" />
   <!-- Opcional: URL/Email da Central de Ajuda -->
   <meta name="help-email" content="suporte@atimus.agr.br" />
   <title>Athos | Login</title>
+  <link rel="preload" as="image" href="./assets/athos-logo.png" fetchpriority="high" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -27,6 +24,7 @@
       --border: rgba(148,163,184,.26);
       --shadow: 0 18px 40px rgba(0,0,0,.30);
       --radius: 16px;
+      --login-bg-image: none;
     }
 
     *{ box-sizing:border-box; margin:0; padding:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
@@ -50,14 +48,17 @@
       content:"";
       position:fixed;
       inset:-24px;
-      background-image: url("./assets/login-bg.png");
+      background-image: var(--login-bg-image, none);
       background-size: cover;
       background-position: center;
       background-repeat:no-repeat;
-      filter: blur(4px) brightness(.72) saturate(1.05);
+      filter: blur(3px) brightness(.72) saturate(1.05);
       transform: scale(1.06);
+      opacity: 0;
+      transition: opacity .34s ease;
       z-index:-2;
     }
+    body[data-bg-ready="1"]::before{ opacity: 1; }
     body::after{
       content:"";
       position:fixed;
@@ -336,7 +337,7 @@
 <body>
   <main class="auth-card" role="main">
     <div class="brand" aria-label="Athos">
-      <img class="brand-logo" src="./assets/athos-logo.png" alt="Athos" />
+      <img class="brand-logo" src="./assets/athos-logo.png" alt="Athos" decoding="async" fetchpriority="high" />
     </div>
 
     <div id="alertBox" class="alert" role="alert" aria-live="polite"></div>
@@ -480,10 +481,10 @@
     if (host.includes("localhost") || host.includes("127.0.0.1")) return "http://127.0.0.1:8000";
     return document.querySelector('meta[name="api-base"]')?.content || "https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net";
   })();
-  const FRONTEND_BUILD_STAMP = '20260422.3';
   const CLIENTE_TOKEN_KEY = 'cliente_token';
   const PASSWORD_CHANGE_CONTEXT_KEY = 'athos_password_change_context';
-  const PERF_DEBUG_STORAGE_KEY = 'athos_perf_debug';
+  const AUTH_HANDOFF_STORAGE_KEY = 'athos_auth_handoff_v1';
+  const AUTH_HANDOFF_MAX_AGE_MS = 2 * 60 * 1000;
   let authRedirectInProgress = false;
 
   function debugAuth(event, details) {
@@ -501,53 +502,6 @@
       return new URL(String(target || ''), window.location.origin).toString();
     } catch (_) {
       return '';
-    }
-  }
-
-  function buildRedirectTargetPreview(target) {
-    try {
-      const url = new URL(String(target || ''), window.location.origin);
-      const keys = Array.from(new Set(Array.from(url.searchParams.keys()).filter(Boolean)));
-      const queryPreview = keys.length ? `?${keys.join('&')}` : '';
-      return `${url.origin}${url.pathname}${queryPreview}`;
-    } catch (_) {
-      const raw = String(target || '');
-      return raw.split('?')[0] || raw;
-    }
-  }
-
-  function readRedirectFlags(target) {
-    try {
-      const parsed = new URL(String(target || ''), window.location.origin);
-      return {
-        hasTokenInRedirect: Boolean(String(parsed.searchParams.get('token') || '').trim()),
-        hasBootInRedirect: Boolean(String(parsed.searchParams.get('boot') || '').trim()),
-        targetPreview: buildRedirectTargetPreview(parsed.toString()),
-      };
-    } catch (_) {
-      return {
-        hasTokenInRedirect: false,
-        hasBootInRedirect: false,
-        targetPreview: buildRedirectTargetPreview(target),
-      };
-    }
-  }
-
-  function ensureRedirectHasToken(target, token) {
-    const safeToken = String(token || '').trim();
-    if (!safeToken) return { url: target, injected: false };
-    try {
-      const parsed = new URL(String(target || ''), window.location.origin);
-      const hasToken = Boolean(String(parsed.searchParams.get('token') || '').trim());
-      if (hasToken) return { url: parsed.toString(), injected: false };
-      parsed.searchParams.set('token', safeToken);
-      return { url: parsed.toString(), injected: true };
-    } catch (_) {
-      const raw = String(target || '').trim();
-      if (!raw) return { url: target, injected: false };
-      if (/[?&]token=/.test(raw)) return { url: raw, injected: false };
-      const sep = raw.includes('?') ? '&' : '?';
-      return { url: `${raw}${sep}token=${encodeURIComponent(safeToken)}`, injected: true };
     }
   }
 
@@ -599,51 +553,6 @@
   function showView(name) {
     Object.values(views).forEach((v) => v && v.classList.add('hidden'));
     views[name]?.classList.remove('hidden');
-  }
-
-  function isPerfDebugEnabled() {
-    try {
-      if (window.ATHOS_PERF_DEBUG === true) return true;
-    } catch (_) {}
-
-    const host = String(window.location.hostname || '').toLowerCase();
-    if (host.includes('localhost') || host.includes('127.0.0.1')) return true;
-
-    try {
-      const value = String(
-        localStorage.getItem(PERF_DEBUG_STORAGE_KEY) ||
-        sessionStorage.getItem(PERF_DEBUG_STORAGE_KEY) ||
-        ''
-      )
-        .trim()
-        .toLowerCase();
-      return value === '1' || value === 'true' || value === 'yes' || value === 'on';
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function perfMark(name) {
-    if (!name || typeof performance?.mark !== 'function') return;
-    try {
-      performance.mark(name);
-    } catch (_) {}
-  }
-
-  function perfMeasure(name, startMark, endMark) {
-    if (!name || !startMark || !endMark || typeof performance?.measure !== 'function') return;
-    try {
-      performance.measure(name, startMark, endMark);
-      if (!isPerfDebugEnabled()) return;
-      const entries = performance.getEntriesByName(name);
-      const latest = entries[entries.length - 1];
-      if (!latest) return;
-      console.debug('[PERF][Login]', name, {
-        durationMs: Number(latest.duration || 0).toFixed(1),
-        startMark,
-        endMark,
-      });
-    } catch (_) {}
   }
 
   async function safeReadJsonResponse(res) {
@@ -893,24 +802,70 @@
     return saved;
   }
 
-  function extractBootstrapUser(payload) {
-    if (!payload || typeof payload !== 'object') return null;
-    const candidate = (
-      payload.bootstrap_user &&
-      typeof payload.bootstrap_user === 'object' &&
-      !Array.isArray(payload.bootstrap_user)
-    )
-      ? payload.bootstrap_user
-      : null;
-    if (!candidate) return null;
+  function decodeBase64Url(value) {
+    const input = String(value || '').trim();
+    if (!input) return '';
+    const padded = input.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(input.length / 4) * 4, '=');
+    try {
+      return decodeURIComponent(Array.from(atob(padded)).map((ch) => `%${ch.charCodeAt(0).toString(16).padStart(2, '0')}`).join(''));
+    } catch (_) {
+      try {
+        return atob(padded);
+      } catch (_) {
+        return '';
+      }
+    }
+  }
 
-    const hasIdentity = Boolean(
-      candidate.id ||
-      String(candidate.nome || '').trim() ||
-      String(candidate.email || '').trim()
-    );
-    if (!hasIdentity) return null;
-    return candidate;
+  function extractBootstrapUserFromSignedHandoff(rawToken) {
+    const token = String(rawToken || '').trim();
+    if (!token) return null;
+
+    const parts = token.split('.');
+    if (parts.length !== 3 || parts[0] !== 'v1') return null;
+
+    const decodedPayload = decodeBase64Url(parts[1]);
+    if (!decodedPayload) return null;
+
+    try {
+      const parsed = JSON.parse(decodedPayload);
+      if (!parsed || typeof parsed !== 'object') return null;
+      const expMs = Number(parsed.exp || 0) * 1000;
+      if (expMs && Date.now() > expMs) return null;
+      const bootstrapUser = parsed.bootstrap_user;
+      return (bootstrapUser && typeof bootstrapUser === 'object') ? bootstrapUser : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function resolveBootstrapUserFromLoginPayload(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+
+    if (payload.bootstrap_user && typeof payload.bootstrap_user === 'object') {
+      return payload.bootstrap_user;
+    }
+
+    return extractBootstrapUserFromSignedHandoff(payload.bootstrap_handoff);
+  }
+
+  function persistAuthHandoffEnvelope(payload) {
+    const bootstrapUser = resolveBootstrapUserFromLoginPayload(payload);
+    if (!bootstrapUser) return false;
+
+    const createdAt = Date.now();
+    const envelope = {
+      createdAt,
+      expiresAt: createdAt + AUTH_HANDOFF_MAX_AGE_MS,
+      payload: bootstrapUser,
+    };
+
+    try {
+      sessionStorage.setItem(AUTH_HANDOFF_STORAGE_KEY, JSON.stringify(envelope));
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   function readPasswordChangeContext() {
@@ -1060,6 +1015,59 @@
     return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
   }
 
+  function warmLoginBackgroundImage() {
+    const bodyEl = document.body;
+    if (!bodyEl) return;
+
+    let reduceData = false;
+    try {
+      reduceData = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-data: reduce)').matches);
+    } catch (_) {}
+    if (reduceData) return;
+
+    const candidates = [
+      './assets/login-bg.avif',
+      './assets/login-bg.webp',
+      './assets/login-bg.png',
+    ];
+
+    const tryLoad = (index = 0) => {
+      if (index >= candidates.length) return;
+      const src = String(candidates[index] || '').trim();
+      if (!src) {
+        tryLoad(index + 1);
+        return;
+      }
+
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        bodyEl.style.setProperty('--login-bg-image', `url("${src}")`);
+        bodyEl.setAttribute('data-bg-ready', '1');
+      };
+      img.onerror = () => {
+        tryLoad(index + 1);
+      };
+      img.src = src;
+    };
+
+    tryLoad(0);
+  }
+
+  const kickLoginBackgroundWarmup = () => {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(() => warmLoginBackgroundImage(), { timeout: 300 });
+      return;
+    }
+    setTimeout(() => warmLoginBackgroundImage(), 120);
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', kickLoginBackgroundWarmup, { once: true });
+  } else {
+    kickLoginBackgroundWarmup();
+  }
+
   async function probeSessionAfterLogin(token = '') {
     const headers = {};
     const probeToken = String(token || readStoredClienteToken() || '').trim();
@@ -1070,7 +1078,7 @@
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        const res = await fetch(`${API_BASE}/cliente/me`, {
+        const res = await fetch(`${API_BASE}/cliente/me?minimal=1`, {
           method: 'GET',
           credentials: 'include',
           headers,
@@ -1258,32 +1266,7 @@
     return hasPasswordFlowHint && isLikelyLoginRoute(url);
   }
 
-  function extractBootstrapHandoff(payload = {}) {
-    if (!payload || typeof payload !== 'object') return '';
-    const detail = payload.detail && typeof payload.detail === 'object' ? payload.detail : {};
-    const nested = payload.data && typeof payload.data === 'object' ? payload.data : {};
-    const candidates = [
-      payload.bootstrap_handoff,
-      payload.boot,
-      payload.bootstrapBoot,
-      payload.redirect_bootstrap,
-      detail.bootstrap_handoff,
-      detail.boot,
-      detail.bootstrapBoot,
-      detail.redirect_bootstrap,
-      nested.bootstrap_handoff,
-      nested.boot,
-      nested.bootstrapBoot,
-      nested.redirect_bootstrap,
-    ];
-    for (const value of candidates) {
-      const token = String(value || '').trim();
-      if (token) return token;
-    }
-    return '';
-  }
-
-  function resolvePostLoginRedirect(baseRedirect, { boot = '', token = '' } = {}) {
+  function resolvePostLoginRedirect(baseRedirect, token = '') {
     const localFallback = `${window.location.origin}${POST_LOGIN_PREFIX}/`;
     let target = ['localhost', '127.0.0.1'].includes(window.location.hostname)
       ? localFallback
@@ -1313,26 +1296,17 @@
 
     try {
       const url = new URL(target, window.location.origin);
-      if (boot) url.searchParams.set('boot', boot);
       if (token) url.searchParams.set('token', token);
-      url.searchParams.set('v', FRONTEND_BUILD_STAMP);
       const resolved = url.toString();
-      const redirectFlags = readRedirectFlags(resolved);
       debugAuth('post_login_redirect_resolved', {
-        targetPreview: redirectFlags.targetPreview,
+        target: resolved,
         fromNext: Boolean(rawNext),
         fromBackendRedirect: Boolean(baseRedirect),
-        hasBoot: redirectFlags.hasBootInRedirect,
-        hasToken: redirectFlags.hasTokenInRedirect,
+        hasToken: Boolean(token),
       });
       return resolved;
     } catch (_) {
-      const fallbackPreview = buildRedirectTargetPreview(target);
-      debugAuth('post_login_redirect_resolved_raw_target', {
-        targetPreview: fallbackPreview,
-        hasBoot: Boolean(boot),
-        hasToken: Boolean(token),
-      });
+      debugAuth('post_login_redirect_resolved_raw_target', { target, hasToken: Boolean(token) });
       return target;
     }
   }
@@ -1449,7 +1423,6 @@
   document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     persistRememberPrefs();
-    perfMark('login_submit');
 
     const btn = document.getElementById('loginBtn');
     const original = btn?.innerText || 'Entrar';
@@ -1478,43 +1451,31 @@
       const passwordChangeRequired = isPasswordChangeRequiredPayload(json);
       const hasPasswordFlowHint = payloadHasPasswordFlowHint(json);
       const authToken = extractAuthTokenFromResponse(res, json);
-      const payloadToken = String(json?.token || json?.cliente_token || '').trim();
-      const responseToken = String(authToken || payloadToken).trim();
-      const bootstrapHandoff = extractBootstrapHandoff(json);
-      const shouldForcePasswordFlow =
-        passwordChangeRequired ||
-        (!res.ok && hasPasswordFlowHint) ||
-        (res.ok && hasPasswordFlowHint && !responseToken);
+      const shouldForcePasswordFlow = passwordChangeRequired || (!res.ok && hasPasswordFlowHint) || (res.ok && hasPasswordFlowHint && !authToken);
+      const handoffPersisted = persistAuthHandoffEnvelope(json);
       debugAuth('login_response', {
         status: res.status,
         ok: res.ok,
         passwordChangeRequired,
         hasPasswordFlowHint,
         hasAuthToken: Boolean(authToken),
-        hasResponseToken: Boolean(responseToken),
+        hasBootstrapUser: Boolean(json?.bootstrap_user && typeof json.bootstrap_user === 'object'),
+        hasBootstrapHandoff: Boolean(String(json?.bootstrap_handoff || '').trim()),
+        handoffPersisted,
         shouldForcePasswordFlow,
-      });
-      debugAuth('login_success_payload_received', {
-        hasToken: Boolean(String(json?.token || '').trim()),
-        hasClienteToken: Boolean(String(json?.cliente_token || '').trim()),
-        hasRedirect: Boolean(String(json?.redirect || '').trim()),
-        hasBootstrapHandoff: Boolean(bootstrapHandoff),
       });
 
       if (res.ok) {
-        perfMark('login_success_response');
-        perfMeasure('login_submit_to_success_response_ms', 'login_submit', 'login_success_response');
-
         if (shouldForcePasswordFlow) {
-          if (responseToken) {
-            persistClienteToken(responseToken, { remember: Boolean(rememberMe?.checked) });
+          if (authToken) {
+            persistClienteToken(authToken, { remember: Boolean(rememberMe?.checked) });
           }
-          goToPasswordChangeFlow(json, { email: data.email, authToken: responseToken });
+          goToPasswordChangeFlow(json, { email: data.email, authToken });
           return;
         }
 
-        if (responseToken) {
-          const tokenStored = persistClienteToken(responseToken, { remember: Boolean(rememberMe?.checked) });
+        if (authToken) {
+          const tokenStored = persistClienteToken(authToken, { remember: Boolean(rememberMe?.checked) });
           debugAuth('login_token_persisted', { tokenStored });
           if (!tokenStored) {
             showAlert('Não foi possível salvar a sessão no navegador.', true);
@@ -1524,87 +1485,63 @@
           debugAuth('login_without_token_in_payload');
         }
 
-        const bootstrapUser = extractBootstrapUser(json);
-        debugAuth('login_bootstrap_payload', {
-          hasBootstrapUser: Boolean(bootstrapUser),
-          hasBootstrapHandoff: Boolean(bootstrapHandoff),
-        });
-
-        const hasAdditionalSessionEvidence = Boolean(bootstrapUser) || Boolean(bootstrapHandoff) || (
-          json &&
-          typeof json === 'object' &&
-          (json.logado === true || isTruthyLike(json.sucesso))
-        );
-        const shouldRunSessionProbeFallback = !responseToken && !hasAdditionalSessionEvidence;
-        if (shouldRunSessionProbeFallback) {
-          const sessionProbe = await probeSessionAfterLogin(responseToken);
-          if (sessionProbe?.requiresPasswordChange) {
-            goToPasswordChangeFlow(sessionProbe.payload || json, { email: data.email, authToken: responseToken });
-            return;
-          }
-
-          if (!sessionProbe?.ok) {
-            const probeStatus = Number(sessionProbe?.res?.status || 0);
-            const probeMessage = extractApiErrorMessage(
-              sessionProbe?.payload,
-              'Não foi possível confirmar a sessão após o login.'
-            );
-            debugAuth('login_blocked_by_session_probe', {
-              probeStatus,
-              networkError: Boolean(sessionProbe?.networkError),
-              probeMessage,
-            });
-
-            if (probeStatus === 401 || probeStatus === 403) {
-              showAlert('Login recebido, mas a sessão não foi confirmada. Tente novamente.', true);
-              return;
-            }
-            if (sessionProbe?.networkError) {
-              showAlert('Não foi possível confirmar a sessão por instabilidade de rede. Tente novamente.', true);
-              return;
-            }
-            showAlert(probeMessage, true);
-            return;
-          }
-        } else {
-          debugAuth('login_session_probe_skipped', {
-            hasAuthToken: Boolean(responseToken),
-            hasAdditionalSessionEvidence,
-          });
-        }
-
         clearPasswordChallengeFlow({ clearUrlParams: true });
-        let redirectUrl = resolvePostLoginRedirect(json?.redirect, {
-          boot: bootstrapHandoff,
-          token: responseToken,
-        });
-        if (responseToken) {
-          const ensured = ensureRedirectHasToken(redirectUrl, responseToken);
-          if (ensured.injected) {
-            debugAuth('post_login_redirect_token_injected', {
-              targetPreview: buildRedirectTargetPreview(ensured.url),
-            });
-            redirectUrl = ensured.url;
+        if (authToken) {
+          const redirectUrl = resolvePostLoginRedirect(json?.redirect, authToken || json?.token);
+          const redirected = redirectWithGuard(redirectUrl, 'login_success_fastpath');
+          if (!redirected) {
+            const fallbackRedirectUrl = resolvePostLoginRedirect('', authToken || json?.token);
+            redirectWithGuard(fallbackRedirectUrl, 'login_success_fastpath_fallback');
           }
+          void probeSessionAfterLogin(authToken).catch((probeErr) => {
+            debugAuth('login_post_redirect_probe_error', {
+              message: probeErr?.message || String(probeErr || ''),
+            });
+          });
+          return;
         }
-        debugAuth('post_login_redirect_navigate', readRedirectFlags(redirectUrl));
+
+        const sessionProbe = await probeSessionAfterLogin(authToken);
+        if (sessionProbe?.requiresPasswordChange) {
+          goToPasswordChangeFlow(sessionProbe.payload || json, { email: data.email, authToken });
+          return;
+        }
+
+        if (!sessionProbe?.ok) {
+          const probeStatus = Number(sessionProbe?.res?.status || 0);
+          const probeMessage = extractApiErrorMessage(
+            sessionProbe?.payload,
+            'Não foi possível confirmar a sessão após o login.'
+          );
+          debugAuth('login_blocked_by_session_probe', {
+            probeStatus,
+            networkError: Boolean(sessionProbe?.networkError),
+            probeMessage,
+          });
+
+          if (probeStatus === 401 || probeStatus === 403) {
+            showAlert('Login recebido, mas a sessão não foi confirmada. Tente novamente.', true);
+            return;
+          }
+          if (sessionProbe?.networkError) {
+            showAlert('Não foi possível confirmar a sessão por instabilidade de rede. Tente novamente.', true);
+            return;
+          }
+          showAlert(probeMessage, true);
+          return;
+        }
+
+        const redirectUrl = resolvePostLoginRedirect(json?.redirect, authToken || json?.token);
         const redirected = redirectWithGuard(redirectUrl, 'login_success');
         if (!redirected) {
-          let fallbackRedirectUrl = resolvePostLoginRedirect('', {
-            boot: bootstrapHandoff,
-            token: responseToken,
-          });
-          if (responseToken) {
-            fallbackRedirectUrl = ensureRedirectHasToken(fallbackRedirectUrl, responseToken).url;
-          }
-          debugAuth('post_login_redirect_navigate', readRedirectFlags(fallbackRedirectUrl));
+          const fallbackRedirectUrl = resolvePostLoginRedirect('', authToken || json?.token);
           redirectWithGuard(fallbackRedirectUrl, 'login_success_fallback');
         }
         return;
       }
 
       if (shouldForcePasswordFlow) {
-        goToPasswordChangeFlow(json, { email: data.email, authToken: responseToken });
+        goToPasswordChangeFlow(json, { email: data.email, authToken });
         return;
       }
 
@@ -1732,16 +1669,10 @@
 
         if (useMandatoryPasswordChange) {
           showAlert('Senha atualizada com sucesso. Redirecionando...', false);
-          const redirectUrl = resolvePostLoginRedirect(json?.redirect, {
-            boot: extractBootstrapHandoff(json),
-            token: nextAuthToken || authToken || json?.token || json?.cliente_token || '',
-          });
+          const redirectUrl = resolvePostLoginRedirect(json?.redirect, nextAuthToken || authToken || json?.token);
           const redirected = redirectWithGuard(redirectUrl, 'mandatory_password_change_success');
           if (!redirected) {
-            const fallbackRedirectUrl = resolvePostLoginRedirect('', {
-              boot: extractBootstrapHandoff(json),
-              token: nextAuthToken || authToken || json?.token || json?.cliente_token || '',
-            });
+            const fallbackRedirectUrl = resolvePostLoginRedirect('', nextAuthToken || authToken || json?.token);
             redirectWithGuard(fallbackRedirectUrl, 'mandatory_password_change_success_fallback');
           }
           return;
@@ -1795,7 +1726,18 @@
         headers['X-Cliente-Token'] = storedToken;
       }
 
-      const res = await fetch(`${API_BASE}/cliente/me`, { credentials: 'include', headers });
+      const canOptimisticRedirect =
+        shouldAutoRedirect &&
+        Boolean(storedToken) &&
+        !forcePasswordChangeRequested &&
+        !Boolean(currentResetToken);
+      if (canOptimisticRedirect) {
+        const optimisticRedirectUrl = resolvePostLoginRedirect('', storedToken);
+        const redirectedEarly = redirectWithGuard(optimisticRedirectUrl, 'auto_session_redirect_optimistic');
+        if (redirectedEarly) return;
+      }
+
+      const res = await fetch(`${API_BASE}/cliente/me?minimal=1`, { credentials: 'include', headers });
       debugAuth('auto_session_check_response', { status: res.status, ok: res.ok, hasStoredToken: Boolean(storedToken) });
       if (!res.ok) return;
 
@@ -1819,10 +1761,7 @@
       }
 
       if (shouldAutoRedirect && json?.logado !== false) {
-        const redirectUrl = resolvePostLoginRedirect(json?.redirect, {
-          boot: extractBootstrapHandoff(json),
-          token: tokenFromSessionCheck || json?.token || json?.cliente_token || storedToken || '',
-        });
+        const redirectUrl = resolvePostLoginRedirect(json?.redirect, tokenFromSessionCheck || json?.token);
         redirectWithGuard(redirectUrl, 'auto_session_redirect');
       }
     } catch (err) {
