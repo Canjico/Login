@@ -1423,13 +1423,19 @@
       const passwordChangeRequired = isPasswordChangeRequiredPayload(json);
       const hasPasswordFlowHint = payloadHasPasswordFlowHint(json);
       const authToken = extractAuthTokenFromResponse(res, json);
-      const shouldForcePasswordFlow = passwordChangeRequired || (!res.ok && hasPasswordFlowHint) || (res.ok && hasPasswordFlowHint && !authToken);
+      const payloadToken = String(json?.token || json?.cliente_token || '').trim();
+      const responseToken = String(authToken || payloadToken).trim();
+      const shouldForcePasswordFlow =
+        passwordChangeRequired ||
+        (!res.ok && hasPasswordFlowHint) ||
+        (res.ok && hasPasswordFlowHint && !responseToken);
       debugAuth('login_response', {
         status: res.status,
         ok: res.ok,
         passwordChangeRequired,
         hasPasswordFlowHint,
         hasAuthToken: Boolean(authToken),
+        hasResponseToken: Boolean(responseToken),
         shouldForcePasswordFlow,
       });
 
@@ -1438,15 +1444,15 @@
         perfMeasure('login_submit_to_success_response_ms', 'login_submit', 'login_success_response');
 
         if (shouldForcePasswordFlow) {
-          if (authToken) {
-            persistClienteToken(authToken, { remember: Boolean(rememberMe?.checked) });
+          if (responseToken) {
+            persistClienteToken(responseToken, { remember: Boolean(rememberMe?.checked) });
           }
-          goToPasswordChangeFlow(json, { email: data.email, authToken });
+          goToPasswordChangeFlow(json, { email: data.email, authToken: responseToken });
           return;
         }
 
-        if (authToken) {
-          const tokenStored = persistClienteToken(authToken, { remember: Boolean(rememberMe?.checked) });
+        if (responseToken) {
+          const tokenStored = persistClienteToken(responseToken, { remember: Boolean(rememberMe?.checked) });
           debugAuth('login_token_persisted', { tokenStored });
           if (!tokenStored) {
             showAlert('Não foi possível salvar a sessão no navegador.', true);
@@ -1468,11 +1474,11 @@
           typeof json === 'object' &&
           (json.logado === true || isTruthyLike(json.sucesso))
         );
-        const shouldRunSessionProbeFallback = !authToken && !hasAdditionalSessionEvidence;
+        const shouldRunSessionProbeFallback = !responseToken && !hasAdditionalSessionEvidence;
         if (shouldRunSessionProbeFallback) {
-          const sessionProbe = await probeSessionAfterLogin(authToken);
+          const sessionProbe = await probeSessionAfterLogin(responseToken);
           if (sessionProbe?.requiresPasswordChange) {
-            goToPasswordChangeFlow(sessionProbe.payload || json, { email: data.email, authToken });
+            goToPasswordChangeFlow(sessionProbe.payload || json, { email: data.email, authToken: responseToken });
             return;
           }
 
@@ -1501,7 +1507,7 @@
           }
         } else {
           debugAuth('login_session_probe_skipped', {
-            hasAuthToken: Boolean(authToken),
+            hasAuthToken: Boolean(responseToken),
             hasAdditionalSessionEvidence,
           });
         }
@@ -1509,13 +1515,13 @@
         clearPasswordChallengeFlow({ clearUrlParams: true });
         const redirectUrl = resolvePostLoginRedirect(json?.redirect, {
           boot: bootstrapHandoff,
-          token: authToken || json?.token || '',
+          token: responseToken,
         });
         const redirected = redirectWithGuard(redirectUrl, 'login_success');
         if (!redirected) {
           const fallbackRedirectUrl = resolvePostLoginRedirect('', {
             boot: bootstrapHandoff,
-            token: authToken || json?.token || '',
+            token: responseToken,
           });
           redirectWithGuard(fallbackRedirectUrl, 'login_success_fallback');
         }
@@ -1523,7 +1529,7 @@
       }
 
       if (shouldForcePasswordFlow) {
-        goToPasswordChangeFlow(json, { email: data.email, authToken });
+        goToPasswordChangeFlow(json, { email: data.email, authToken: responseToken });
         return;
       }
 
@@ -1653,13 +1659,13 @@
           showAlert('Senha atualizada com sucesso. Redirecionando...', false);
           const redirectUrl = resolvePostLoginRedirect(json?.redirect, {
             boot: extractBootstrapHandoff(json),
-            token: nextAuthToken || authToken || json?.token || '',
+            token: nextAuthToken || authToken || json?.token || json?.cliente_token || '',
           });
           const redirected = redirectWithGuard(redirectUrl, 'mandatory_password_change_success');
           if (!redirected) {
             const fallbackRedirectUrl = resolvePostLoginRedirect('', {
               boot: extractBootstrapHandoff(json),
-              token: nextAuthToken || authToken || json?.token || '',
+              token: nextAuthToken || authToken || json?.token || json?.cliente_token || '',
             });
             redirectWithGuard(fallbackRedirectUrl, 'mandatory_password_change_success_fallback');
           }
@@ -1740,7 +1746,7 @@
       if (shouldAutoRedirect && json?.logado !== false) {
         const redirectUrl = resolvePostLoginRedirect(json?.redirect, {
           boot: extractBootstrapHandoff(json),
-          token: tokenFromSessionCheck || json?.token || storedToken || '',
+          token: tokenFromSessionCheck || json?.token || json?.cliente_token || storedToken || '',
         });
         redirectWithGuard(redirectUrl, 'auto_session_redirect');
       }
