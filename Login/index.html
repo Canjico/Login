@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="frontend-build-stamp" content="20260422.3" />
   <!-- Configuração da URL da API de Produção -->
   <meta name="api-base" content="https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net" />
   <!-- Opcional: URL/Email da Central de Ajuda -->
@@ -476,6 +480,7 @@
     if (host.includes("localhost") || host.includes("127.0.0.1")) return "http://127.0.0.1:8000";
     return document.querySelector('meta[name="api-base"]')?.content || "https://atimus-api-acb4gfgagefcevb5.brazilsouth-01.azurewebsites.net";
   })();
+  const FRONTEND_BUILD_STAMP = '20260422.3';
   const CLIENTE_TOKEN_KEY = 'cliente_token';
   const PASSWORD_CHANGE_CONTEXT_KEY = 'athos_password_change_context';
   const PERF_DEBUG_STORAGE_KEY = 'athos_perf_debug';
@@ -496,6 +501,53 @@
       return new URL(String(target || ''), window.location.origin).toString();
     } catch (_) {
       return '';
+    }
+  }
+
+  function buildRedirectTargetPreview(target) {
+    try {
+      const url = new URL(String(target || ''), window.location.origin);
+      const keys = Array.from(new Set(Array.from(url.searchParams.keys()).filter(Boolean)));
+      const queryPreview = keys.length ? `?${keys.join('&')}` : '';
+      return `${url.origin}${url.pathname}${queryPreview}`;
+    } catch (_) {
+      const raw = String(target || '');
+      return raw.split('?')[0] || raw;
+    }
+  }
+
+  function readRedirectFlags(target) {
+    try {
+      const parsed = new URL(String(target || ''), window.location.origin);
+      return {
+        hasTokenInRedirect: Boolean(String(parsed.searchParams.get('token') || '').trim()),
+        hasBootInRedirect: Boolean(String(parsed.searchParams.get('boot') || '').trim()),
+        targetPreview: buildRedirectTargetPreview(parsed.toString()),
+      };
+    } catch (_) {
+      return {
+        hasTokenInRedirect: false,
+        hasBootInRedirect: false,
+        targetPreview: buildRedirectTargetPreview(target),
+      };
+    }
+  }
+
+  function ensureRedirectHasToken(target, token) {
+    const safeToken = String(token || '').trim();
+    if (!safeToken) return { url: target, injected: false };
+    try {
+      const parsed = new URL(String(target || ''), window.location.origin);
+      const hasToken = Boolean(String(parsed.searchParams.get('token') || '').trim());
+      if (hasToken) return { url: parsed.toString(), injected: false };
+      parsed.searchParams.set('token', safeToken);
+      return { url: parsed.toString(), injected: true };
+    } catch (_) {
+      const raw = String(target || '').trim();
+      if (!raw) return { url: target, injected: false };
+      if (/[?&]token=/.test(raw)) return { url: raw, injected: false };
+      const sep = raw.includes('?') ? '&' : '?';
+      return { url: `${raw}${sep}token=${encodeURIComponent(safeToken)}`, injected: true };
     }
   }
 
@@ -1263,18 +1315,21 @@
       const url = new URL(target, window.location.origin);
       if (boot) url.searchParams.set('boot', boot);
       if (token) url.searchParams.set('token', token);
+      url.searchParams.set('v', FRONTEND_BUILD_STAMP);
       const resolved = url.toString();
+      const redirectFlags = readRedirectFlags(resolved);
       debugAuth('post_login_redirect_resolved', {
-        target: resolved,
+        targetPreview: redirectFlags.targetPreview,
         fromNext: Boolean(rawNext),
         fromBackendRedirect: Boolean(baseRedirect),
-        hasBoot: Boolean(boot),
-        hasToken: Boolean(token),
+        hasBoot: redirectFlags.hasBootInRedirect,
+        hasToken: redirectFlags.hasTokenInRedirect,
       });
       return resolved;
     } catch (_) {
+      const fallbackPreview = buildRedirectTargetPreview(target);
       debugAuth('post_login_redirect_resolved_raw_target', {
-        target,
+        targetPreview: fallbackPreview,
         hasBoot: Boolean(boot),
         hasToken: Boolean(token),
       });
@@ -1425,6 +1480,7 @@
       const authToken = extractAuthTokenFromResponse(res, json);
       const payloadToken = String(json?.token || json?.cliente_token || '').trim();
       const responseToken = String(authToken || payloadToken).trim();
+      const bootstrapHandoff = extractBootstrapHandoff(json);
       const shouldForcePasswordFlow =
         passwordChangeRequired ||
         (!res.ok && hasPasswordFlowHint) ||
@@ -1437,6 +1493,12 @@
         hasAuthToken: Boolean(authToken),
         hasResponseToken: Boolean(responseToken),
         shouldForcePasswordFlow,
+      });
+      debugAuth('login_success_payload_received', {
+        hasToken: Boolean(String(json?.token || '').trim()),
+        hasClienteToken: Boolean(String(json?.cliente_token || '').trim()),
+        hasRedirect: Boolean(String(json?.redirect || '').trim()),
+        hasBootstrapHandoff: Boolean(bootstrapHandoff),
       });
 
       if (res.ok) {
@@ -1463,7 +1525,6 @@
         }
 
         const bootstrapUser = extractBootstrapUser(json);
-        const bootstrapHandoff = extractBootstrapHandoff(json);
         debugAuth('login_bootstrap_payload', {
           hasBootstrapUser: Boolean(bootstrapUser),
           hasBootstrapHandoff: Boolean(bootstrapHandoff),
@@ -1513,16 +1574,30 @@
         }
 
         clearPasswordChallengeFlow({ clearUrlParams: true });
-        const redirectUrl = resolvePostLoginRedirect(json?.redirect, {
+        let redirectUrl = resolvePostLoginRedirect(json?.redirect, {
           boot: bootstrapHandoff,
           token: responseToken,
         });
+        if (responseToken) {
+          const ensured = ensureRedirectHasToken(redirectUrl, responseToken);
+          if (ensured.injected) {
+            debugAuth('post_login_redirect_token_injected', {
+              targetPreview: buildRedirectTargetPreview(ensured.url),
+            });
+            redirectUrl = ensured.url;
+          }
+        }
+        debugAuth('post_login_redirect_navigate', readRedirectFlags(redirectUrl));
         const redirected = redirectWithGuard(redirectUrl, 'login_success');
         if (!redirected) {
-          const fallbackRedirectUrl = resolvePostLoginRedirect('', {
+          let fallbackRedirectUrl = resolvePostLoginRedirect('', {
             boot: bootstrapHandoff,
             token: responseToken,
           });
+          if (responseToken) {
+            fallbackRedirectUrl = ensureRedirectHasToken(fallbackRedirectUrl, responseToken).url;
+          }
+          debugAuth('post_login_redirect_navigate', readRedirectFlags(fallbackRedirectUrl));
           redirectWithGuard(fallbackRedirectUrl, 'login_success_fallback');
         }
         return;
