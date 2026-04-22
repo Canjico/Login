@@ -478,6 +478,7 @@
   })();
   const CLIENTE_TOKEN_KEY = 'cliente_token';
   const PASSWORD_CHANGE_CONTEXT_KEY = 'athos_password_change_context';
+  const PERF_DEBUG_STORAGE_KEY = 'athos_perf_debug';
   let authRedirectInProgress = false;
 
   function debugAuth(event, details) {
@@ -546,6 +547,51 @@
   function showView(name) {
     Object.values(views).forEach((v) => v && v.classList.add('hidden'));
     views[name]?.classList.remove('hidden');
+  }
+
+  function isPerfDebugEnabled() {
+    try {
+      if (window.ATHOS_PERF_DEBUG === true) return true;
+    } catch (_) {}
+
+    const host = String(window.location.hostname || '').toLowerCase();
+    if (host.includes('localhost') || host.includes('127.0.0.1')) return true;
+
+    try {
+      const value = String(
+        localStorage.getItem(PERF_DEBUG_STORAGE_KEY) ||
+        sessionStorage.getItem(PERF_DEBUG_STORAGE_KEY) ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+      return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function perfMark(name) {
+    if (!name || typeof performance?.mark !== 'function') return;
+    try {
+      performance.mark(name);
+    } catch (_) {}
+  }
+
+  function perfMeasure(name, startMark, endMark) {
+    if (!name || !startMark || !endMark || typeof performance?.measure !== 'function') return;
+    try {
+      performance.measure(name, startMark, endMark);
+      if (!isPerfDebugEnabled()) return;
+      const entries = performance.getEntriesByName(name);
+      const latest = entries[entries.length - 1];
+      if (!latest) return;
+      console.debug('[PERF][Login]', name, {
+        durationMs: Number(latest.duration || 0).toFixed(1),
+        startMark,
+        endMark,
+      });
+    } catch (_) {}
   }
 
   async function safeReadJsonResponse(res) {
@@ -793,6 +839,26 @@
     } catch (_) {}
 
     return saved;
+  }
+
+  function extractBootstrapUser(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+    const candidate = (
+      payload.bootstrap_user &&
+      typeof payload.bootstrap_user === 'object' &&
+      !Array.isArray(payload.bootstrap_user)
+    )
+      ? payload.bootstrap_user
+      : null;
+    if (!candidate) return null;
+
+    const hasIdentity = Boolean(
+      candidate.id ||
+      String(candidate.nome || '').trim() ||
+      String(candidate.email || '').trim()
+    );
+    if (!hasIdentity) return null;
+    return candidate;
   }
 
   function readPasswordChangeContext() {
@@ -1140,7 +1206,32 @@
     return hasPasswordFlowHint && isLikelyLoginRoute(url);
   }
 
-  function resolvePostLoginRedirect(baseRedirect, token = '') {
+  function extractBootstrapHandoff(payload = {}) {
+    if (!payload || typeof payload !== 'object') return '';
+    const detail = payload.detail && typeof payload.detail === 'object' ? payload.detail : {};
+    const nested = payload.data && typeof payload.data === 'object' ? payload.data : {};
+    const candidates = [
+      payload.bootstrap_handoff,
+      payload.boot,
+      payload.bootstrapBoot,
+      payload.redirect_bootstrap,
+      detail.bootstrap_handoff,
+      detail.boot,
+      detail.bootstrapBoot,
+      detail.redirect_bootstrap,
+      nested.bootstrap_handoff,
+      nested.boot,
+      nested.bootstrapBoot,
+      nested.redirect_bootstrap,
+    ];
+    for (const value of candidates) {
+      const token = String(value || '').trim();
+      if (token) return token;
+    }
+    return '';
+  }
+
+  function resolvePostLoginRedirect(baseRedirect, { boot = '', token = '' } = {}) {
     const localFallback = `${window.location.origin}${POST_LOGIN_PREFIX}/`;
     let target = ['localhost', '127.0.0.1'].includes(window.location.hostname)
       ? localFallback
@@ -1170,17 +1261,23 @@
 
     try {
       const url = new URL(target, window.location.origin);
+      if (boot) url.searchParams.set('boot', boot);
       if (token) url.searchParams.set('token', token);
       const resolved = url.toString();
       debugAuth('post_login_redirect_resolved', {
         target: resolved,
         fromNext: Boolean(rawNext),
         fromBackendRedirect: Boolean(baseRedirect),
+        hasBoot: Boolean(boot),
         hasToken: Boolean(token),
       });
       return resolved;
     } catch (_) {
-      debugAuth('post_login_redirect_resolved_raw_target', { target, hasToken: Boolean(token) });
+      debugAuth('post_login_redirect_resolved_raw_target', {
+        target,
+        hasBoot: Boolean(boot),
+        hasToken: Boolean(token),
+      });
       return target;
     }
   }
@@ -1297,6 +1394,7 @@
   document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     persistRememberPrefs();
+    perfMark('login_submit');
 
     const btn = document.getElementById('loginBtn');
     const original = btn?.innerText || 'Entrar';
@@ -1336,6 +1434,9 @@
       });
 
       if (res.ok) {
+        perfMark('login_success_response');
+        perfMeasure('login_submit_to_success_response_ms', 'login_submit', 'login_success_response');
+
         if (shouldForcePasswordFlow) {
           if (authToken) {
             persistClienteToken(authToken, { remember: Boolean(rememberMe?.checked) });
@@ -1355,43 +1456,67 @@
           debugAuth('login_without_token_in_payload');
         }
 
-        const sessionProbe = await probeSessionAfterLogin(authToken);
-        if (sessionProbe?.requiresPasswordChange) {
-          goToPasswordChangeFlow(sessionProbe.payload || json, { email: data.email, authToken });
-          return;
-        }
+        const bootstrapUser = extractBootstrapUser(json);
+        const bootstrapHandoff = extractBootstrapHandoff(json);
+        debugAuth('login_bootstrap_payload', {
+          hasBootstrapUser: Boolean(bootstrapUser),
+          hasBootstrapHandoff: Boolean(bootstrapHandoff),
+        });
 
-        if (!sessionProbe?.ok) {
-          const probeStatus = Number(sessionProbe?.res?.status || 0);
-          const probeMessage = extractApiErrorMessage(
-            sessionProbe?.payload,
-            'Não foi possível confirmar a sessão após o login.'
-          );
-          debugAuth('login_blocked_by_session_probe', {
-            probeStatus,
-            networkError: Boolean(sessionProbe?.networkError),
-            probeMessage,
-          });
+        const hasAdditionalSessionEvidence = Boolean(bootstrapUser) || Boolean(bootstrapHandoff) || (
+          json &&
+          typeof json === 'object' &&
+          (json.logado === true || isTruthyLike(json.sucesso))
+        );
+        const shouldRunSessionProbeFallback = !authToken && !hasAdditionalSessionEvidence;
+        if (shouldRunSessionProbeFallback) {
+          const sessionProbe = await probeSessionAfterLogin(authToken);
+          if (sessionProbe?.requiresPasswordChange) {
+            goToPasswordChangeFlow(sessionProbe.payload || json, { email: data.email, authToken });
+            return;
+          }
 
-          if (sessionProbe?.networkError && authToken) {
-            debugAuth('login_probe_network_error_but_token_available', { hasAuthToken: true });
-          } else if (probeStatus === 401 || probeStatus === 403) {
-            showAlert('Login recebido, mas a sessão não foi confirmada. Tente novamente.', true);
-            return;
-          } else if (sessionProbe?.networkError) {
-            showAlert('Não foi possível confirmar a sessão por instabilidade de rede. Tente novamente.', true);
-            return;
-          } else {
+          if (!sessionProbe?.ok) {
+            const probeStatus = Number(sessionProbe?.res?.status || 0);
+            const probeMessage = extractApiErrorMessage(
+              sessionProbe?.payload,
+              'Não foi possível confirmar a sessão após o login.'
+            );
+            debugAuth('login_blocked_by_session_probe', {
+              probeStatus,
+              networkError: Boolean(sessionProbe?.networkError),
+              probeMessage,
+            });
+
+            if (probeStatus === 401 || probeStatus === 403) {
+              showAlert('Login recebido, mas a sessão não foi confirmada. Tente novamente.', true);
+              return;
+            }
+            if (sessionProbe?.networkError) {
+              showAlert('Não foi possível confirmar a sessão por instabilidade de rede. Tente novamente.', true);
+              return;
+            }
             showAlert(probeMessage, true);
             return;
           }
+        } else {
+          debugAuth('login_session_probe_skipped', {
+            hasAuthToken: Boolean(authToken),
+            hasAdditionalSessionEvidence,
+          });
         }
 
         clearPasswordChallengeFlow({ clearUrlParams: true });
-        const redirectUrl = resolvePostLoginRedirect(json?.redirect, authToken || json?.token);
+        const redirectUrl = resolvePostLoginRedirect(json?.redirect, {
+          boot: bootstrapHandoff,
+          token: authToken || json?.token || '',
+        });
         const redirected = redirectWithGuard(redirectUrl, 'login_success');
         if (!redirected) {
-          const fallbackRedirectUrl = resolvePostLoginRedirect('', authToken || json?.token);
+          const fallbackRedirectUrl = resolvePostLoginRedirect('', {
+            boot: bootstrapHandoff,
+            token: authToken || json?.token || '',
+          });
           redirectWithGuard(fallbackRedirectUrl, 'login_success_fallback');
         }
         return;
@@ -1526,10 +1651,16 @@
 
         if (useMandatoryPasswordChange) {
           showAlert('Senha atualizada com sucesso. Redirecionando...', false);
-          const redirectUrl = resolvePostLoginRedirect(json?.redirect, nextAuthToken || authToken || json?.token);
+          const redirectUrl = resolvePostLoginRedirect(json?.redirect, {
+            boot: extractBootstrapHandoff(json),
+            token: nextAuthToken || authToken || json?.token || '',
+          });
           const redirected = redirectWithGuard(redirectUrl, 'mandatory_password_change_success');
           if (!redirected) {
-            const fallbackRedirectUrl = resolvePostLoginRedirect('', nextAuthToken || authToken || json?.token);
+            const fallbackRedirectUrl = resolvePostLoginRedirect('', {
+              boot: extractBootstrapHandoff(json),
+              token: nextAuthToken || authToken || json?.token || '',
+            });
             redirectWithGuard(fallbackRedirectUrl, 'mandatory_password_change_success_fallback');
           }
           return;
@@ -1607,7 +1738,10 @@
       }
 
       if (shouldAutoRedirect && json?.logado !== false) {
-        const redirectUrl = resolvePostLoginRedirect(json?.redirect, tokenFromSessionCheck || json?.token);
+        const redirectUrl = resolvePostLoginRedirect(json?.redirect, {
+          boot: extractBootstrapHandoff(json),
+          token: tokenFromSessionCheck || json?.token || storedToken || '',
+        });
         redirectWithGuard(redirectUrl, 'auto_session_redirect');
       }
     } catch (err) {
