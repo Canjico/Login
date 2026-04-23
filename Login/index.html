@@ -485,9 +485,50 @@
   const PASSWORD_CHANGE_CONTEXT_KEY = 'athos_password_change_context';
   const AUTH_HANDOFF_STORAGE_KEY = 'athos_auth_handoff_v1';
   const AUTH_HANDOFF_MAX_AGE_MS = 2 * 60 * 1000;
+  const AUTH_DEBUG_STORAGE_KEY = 'athos_auth_debug';
+  const LOGIN_DIAGNOSTIC_PROBE_STORAGE_KEY = 'athos_login_probe_session';
   let authRedirectInProgress = false;
 
+  function isTruthyDebugFlag(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+  }
+
+  function isAuthDebugEnabled() {
+    try {
+      if (window.ATHOS_AUTH_DEBUG === true) return true;
+    } catch (_) {}
+
+    try {
+      if (isTruthyDebugFlag(localStorage.getItem(AUTH_DEBUG_STORAGE_KEY))) return true;
+    } catch (_) {}
+
+    try {
+      if (isTruthyDebugFlag(sessionStorage.getItem(AUTH_DEBUG_STORAGE_KEY))) return true;
+    } catch (_) {}
+
+    return false;
+  }
+
+  function isDiagnosticSessionProbeEnabled() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (isTruthyDebugFlag(params.get('auth_probe_session'))) return true;
+    } catch (_) {}
+
+    try {
+      if (isTruthyDebugFlag(localStorage.getItem(LOGIN_DIAGNOSTIC_PROBE_STORAGE_KEY))) return true;
+    } catch (_) {}
+
+    try {
+      if (isTruthyDebugFlag(sessionStorage.getItem(LOGIN_DIAGNOSTIC_PROBE_STORAGE_KEY))) return true;
+    } catch (_) {}
+
+    return false;
+  }
+
   function debugAuth(event, details) {
+    if (!isAuthDebugEnabled()) return;
     // DEBUG_AUTH
     if (details === undefined) {
       console.debug(`[DEBUG_AUTH][Login] ${event}`);
@@ -1015,6 +1056,90 @@
     return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
   }
 
+  function absolutizeApiPath(pathOrUrl) {
+    const input = String(pathOrUrl || '').trim();
+    if (!input) return API_BASE;
+    if (/^https?:\/\//i.test(input)) return input;
+    if (!input.startsWith('/')) return `${API_BASE}/${input}`;
+    return `${API_BASE}${input}`;
+  }
+
+  function normalizeHeadersObject(headers = {}) {
+    if (headers instanceof Headers) {
+      return Object.fromEntries(headers.entries());
+    }
+    return { ...(headers || {}) };
+  }
+
+  function hasExplicitAuthHeaders(headers = {}) {
+    return Object.keys(headers || {}).some((key) => {
+      const normalized = String(key || '').trim().toLowerCase();
+      return normalized === 'authorization' || normalized === 'x-cliente-token';
+    });
+  }
+
+  function buildTokenHeaders(tokenValue = '') {
+    const token = String(tokenValue || '').trim();
+    if (!token) return {};
+    return {
+      Authorization: `Bearer ${token}`,
+      'X-Cliente-Token': token,
+    };
+  }
+
+  async function fetchAuthenticatedGetCookieFirst(pathOrUrl, { headers = {}, token = '' } = {}) {
+    const url = absolutizeApiPath(pathOrUrl);
+    const baseHeaders = normalizeHeadersObject(headers);
+    const hasManualAuthHeader = hasExplicitAuthHeaders(baseHeaders);
+    const persistedToken = String(token || readStoredClienteToken() || '').trim();
+
+    if (hasManualAuthHeader) {
+      const manualResponse = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: baseHeaders,
+      });
+      return {
+        res: manualResponse,
+        usedTokenFallback: false,
+        attemptedTokenFallback: false,
+        firstStatus: Number(manualResponse?.status || 0),
+      };
+    }
+
+    const cookieFirstResponse = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { ...baseHeaders },
+    });
+    const firstStatus = Number(cookieFirstResponse?.status || 0);
+    const attemptedTokenFallback = Boolean(
+      persistedToken &&
+      (firstStatus === 401 || firstStatus === 403)
+    );
+
+    if (!attemptedTokenFallback) {
+      return {
+        res: cookieFirstResponse,
+        usedTokenFallback: false,
+        attemptedTokenFallback: false,
+        firstStatus,
+      };
+    }
+
+    const fallbackResponse = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { ...baseHeaders, ...buildTokenHeaders(persistedToken) },
+    });
+    return {
+      res: fallbackResponse,
+      usedTokenFallback: true,
+      attemptedTokenFallback: true,
+      firstStatus,
+    };
+  }
+
   function warmLoginBackgroundImage() {
     const bodyEl = document.body;
     if (!bodyEl) return;
@@ -1069,20 +1194,17 @@
   }
 
   async function probeSessionAfterLogin(token = '') {
-    const headers = {};
     const probeToken = String(token || readStoredClienteToken() || '').trim();
-    if (probeToken) {
-      headers.Authorization = `Bearer ${probeToken}`;
-      headers['X-Cliente-Token'] = probeToken;
-    }
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        const res = await fetch(`${API_BASE}/cliente/me?minimal=1`, {
-          method: 'GET',
-          credentials: 'include',
-          headers,
+        const fetchResult = await fetchAuthenticatedGetCookieFirst('/cliente/me?minimal=1', {
+          token: probeToken,
         });
+        const res = fetchResult?.res;
+        if (!res) {
+          throw new Error('Falha ao validar sessão após login.');
+        }
         const payload = await safeReadJsonResponse(res);
         const sessionToken = extractAuthTokenFromResponse(res, payload);
         if (sessionToken) {
@@ -1106,6 +1228,9 @@
           explicitlyLoggedOut,
           hasSessionToken: Boolean(sessionToken),
           usedProbeToken: Boolean(probeToken),
+          usedTokenFallback: Boolean(fetchResult?.usedTokenFallback),
+          attemptedTokenFallback: Boolean(fetchResult?.attemptedTokenFallback),
+          firstStatus: Number(fetchResult?.firstStatus || 0),
         });
 
         if (requiresPasswordChange) {
@@ -1136,6 +1261,13 @@
     }
 
     return { ok: false };
+  }
+
+  if (isAuthDebugEnabled() && isDiagnosticSessionProbeEnabled()) {
+    window.athosProbeSessionAfterLogin = probeSessionAfterLogin;
+    debugAuth('diagnostic_probe_enabled', {
+      helper: 'window.athosProbeSessionAfterLogin(token?)',
+    });
   }
 
   // ========================
@@ -1486,56 +1618,33 @@
         }
 
         clearPasswordChallengeFlow({ clearUrlParams: true });
-        if (authToken) {
-          const redirectUrl = resolvePostLoginRedirect(json?.redirect, authToken || json?.token);
-          const redirected = redirectWithGuard(redirectUrl, 'login_success_fastpath');
-          if (!redirected) {
-            const fallbackRedirectUrl = resolvePostLoginRedirect('', authToken || json?.token);
-            redirectWithGuard(fallbackRedirectUrl, 'login_success_fastpath_fallback');
-          }
-          void probeSessionAfterLogin(authToken).catch((probeErr) => {
-            debugAuth('login_post_redirect_probe_error', {
-              message: probeErr?.message || String(probeErr || ''),
-            });
-          });
-          return;
-        }
+        const hasBootstrapUser = Boolean(json?.bootstrap_user && typeof json.bootstrap_user === 'object');
+        const hasBootstrapHandoff = Boolean(String(json?.bootstrap_handoff || '').trim());
+        const hasBackendRedirect = Boolean(String(json?.redirect || '').trim());
+        const canRedirectImmediately = Boolean(
+          authToken ||
+          hasBootstrapUser ||
+          hasBootstrapHandoff ||
+          hasBackendRedirect
+        );
+        debugAuth('login_immediate_redirect_decision', {
+          canRedirectImmediately,
+          hasAuthToken: Boolean(authToken),
+          hasBootstrapUser,
+          hasBootstrapHandoff,
+          hasBackendRedirect,
+        });
 
-        const sessionProbe = await probeSessionAfterLogin(authToken);
-        if (sessionProbe?.requiresPasswordChange) {
-          goToPasswordChangeFlow(sessionProbe.payload || json, { email: data.email, authToken });
-          return;
-        }
-
-        if (!sessionProbe?.ok) {
-          const probeStatus = Number(sessionProbe?.res?.status || 0);
-          const probeMessage = extractApiErrorMessage(
-            sessionProbe?.payload,
-            'Não foi possível confirmar a sessão após o login.'
-          );
-          debugAuth('login_blocked_by_session_probe', {
-            probeStatus,
-            networkError: Boolean(sessionProbe?.networkError),
-            probeMessage,
-          });
-
-          if (probeStatus === 401 || probeStatus === 403) {
-            showAlert('Login recebido, mas a sessão não foi confirmada. Tente novamente.', true);
-            return;
-          }
-          if (sessionProbe?.networkError) {
-            showAlert('Não foi possível confirmar a sessão por instabilidade de rede. Tente novamente.', true);
-            return;
-          }
-          showAlert(probeMessage, true);
+        if (!canRedirectImmediately) {
+          showAlert('Login concluído, mas sem contexto de sessão para redirecionar.', true);
           return;
         }
 
         const redirectUrl = resolvePostLoginRedirect(json?.redirect, authToken || json?.token);
-        const redirected = redirectWithGuard(redirectUrl, 'login_success');
+        const redirected = redirectWithGuard(redirectUrl, 'login_success_immediate');
         if (!redirected) {
           const fallbackRedirectUrl = resolvePostLoginRedirect('', authToken || json?.token);
-          redirectWithGuard(fallbackRedirectUrl, 'login_success_fallback');
+          redirectWithGuard(fallbackRedirectUrl, 'login_success_immediate_fallback');
         }
         return;
       }
@@ -1719,12 +1828,7 @@
     if (!shouldCheckSession) return;
 
     try {
-      const headers = {};
       const storedToken = readStoredClienteToken();
-      if (storedToken) {
-        headers.Authorization = `Bearer ${storedToken}`;
-        headers['X-Cliente-Token'] = storedToken;
-      }
 
       const canOptimisticRedirect =
         shouldAutoRedirect &&
@@ -1737,8 +1841,19 @@
         if (redirectedEarly) return;
       }
 
-      const res = await fetch(`${API_BASE}/cliente/me?minimal=1`, { credentials: 'include', headers });
-      debugAuth('auto_session_check_response', { status: res.status, ok: res.ok, hasStoredToken: Boolean(storedToken) });
+      const fetchResult = await fetchAuthenticatedGetCookieFirst('/cliente/me?minimal=1', {
+        token: storedToken,
+      });
+      const res = fetchResult?.res;
+      if (!res) return;
+      debugAuth('auto_session_check_response', {
+        status: res.status,
+        ok: res.ok,
+        hasStoredToken: Boolean(storedToken),
+        usedTokenFallback: Boolean(fetchResult?.usedTokenFallback),
+        attemptedTokenFallback: Boolean(fetchResult?.attemptedTokenFallback),
+        firstStatus: Number(fetchResult?.firstStatus || 0),
+      });
       if (!res.ok) return;
 
       const json = await safeReadJsonResponse(res);
