@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -808,6 +808,11 @@
 
   function readStoredClienteToken() {
     try {
+      const localToken = localStorage.getItem(CLIENTE_TOKEN_KEY);
+      if (localToken) return localToken;
+    } catch (_) {}
+
+    try {
       const sessionToken = sessionStorage.getItem(CLIENTE_TOKEN_KEY);
       if (sessionToken) return sessionToken;
     } catch (_) {}
@@ -827,7 +832,12 @@
     } catch (_) {}
 
     try {
-      localStorage.removeItem(CLIENTE_TOKEN_KEY);
+      if (remember) {
+        localStorage.setItem(CLIENTE_TOKEN_KEY, token);
+      } else {
+        localStorage.removeItem(CLIENTE_TOKEN_KEY);
+      }
+      saved = true;
     } catch (_) {}
 
     return saved;
