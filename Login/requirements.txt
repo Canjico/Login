@@ -15,8 +15,9 @@ openai>=1.0.0
 # Processamento de PDF
 PyPDF2
 
-# Driver SQL (Necessário se estiver usando MSSQL/SQL Server)
-pyodbc
+# Driver MariaDB/MySQL
+PyMySQL>=1.1.1,<2.0
+cryptography>=42.0.0
 
 # Envio de Email (Azure Communication Services)
 azure-communication-email
