@@ -1428,13 +1428,15 @@
 
     try {
       const url = new URL(target, window.location.origin);
-      if (token) url.searchParams.set('token', token);
+      // Segurança: não anexar token de sessão na URL.
+      // A sessão oficial deve vir por cookie HttpOnly; token em query vaza em histórico, logs e Referer.
       const resolved = url.toString();
       debugAuth('post_login_redirect_resolved', {
         target: resolved,
         fromNext: Boolean(rawNext),
         fromBackendRedirect: Boolean(baseRedirect),
         hasToken: Boolean(token),
+        tokenInUrl: false,
       });
       return resolved;
     } catch (_) {

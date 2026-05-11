@@ -1,0 +1,11 @@
+{
+  "name": "athos-login",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test __tests__/*.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
