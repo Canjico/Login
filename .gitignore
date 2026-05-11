@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Bancos locais / dumps
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+
+# Segredos / ambiente
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+Log/
+
+# Node / builds
+node_modules/
+dist/
+build/
+.cache/
+.DS_Store
+Thumbs.db
