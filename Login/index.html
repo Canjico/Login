@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -1398,6 +1398,22 @@
     return hasPasswordFlowHint && isLikelyLoginRoute(url);
   }
 
+  function appendAuthTokenFragment(targetUrl, tokenValue = '') {
+    const token = String(tokenValue || '').trim();
+    if (!token) return targetUrl;
+
+    try {
+      const url = new URL(targetUrl, window.location.origin);
+      const hashParams = new URLSearchParams(String(url.hash || '').replace(/^#/, ''));
+      hashParams.set('__athos_session', token);
+      url.hash = hashParams.toString();
+      return url.toString();
+    } catch (_) {
+      const sep = String(targetUrl || '').includes('#') ? '&' : '#';
+      return `${targetUrl}${sep}__athos_session=${encodeURIComponent(token)}`;
+    }
+  }
+
   function resolvePostLoginRedirect(baseRedirect, token = '') {
     const localFallback = `${window.location.origin}${POST_LOGIN_PREFIX}/`;
     let target = ['localhost', '127.0.0.1'].includes(window.location.hostname)
@@ -1428,20 +1444,28 @@
 
     try {
       const url = new URL(target, window.location.origin);
-      // Segurança: não anexar token de sessão na URL.
-      // A sessão oficial deve vir por cookie HttpOnly; token em query vaza em histórico, logs e Referer.
-      const resolved = url.toString();
+      // Hotfix: enquanto a API não estiver em domínio próprio compatível com cookie first-party,
+      // o Portal precisa receber a sessão em um handoff transitório. Usamos fragmento (#),
+      // não query string: o hash não vai para servidor/log HTTP e o Portal limpa no bootstrap.
+      const resolved = appendAuthTokenFragment(url.toString(), token);
       debugAuth('post_login_redirect_resolved', {
         target: resolved,
         fromNext: Boolean(rawNext),
         fromBackendRedirect: Boolean(baseRedirect),
         hasToken: Boolean(token),
-        tokenInUrl: false,
+        tokenInQuery: false,
+        tokenInHash: Boolean(token),
       });
       return resolved;
     } catch (_) {
-      debugAuth('post_login_redirect_resolved_raw_target', { target, hasToken: Boolean(token) });
-      return target;
+      const resolved = appendAuthTokenFragment(target, token);
+      debugAuth('post_login_redirect_resolved_raw_target', {
+        target: resolved,
+        hasToken: Boolean(token),
+        tokenInQuery: false,
+        tokenInHash: Boolean(token),
+      });
+      return resolved;
     }
   }
 
