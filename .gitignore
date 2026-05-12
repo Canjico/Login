@@ -3,7 +3,11 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 .venv/
 venv/
 
@@ -28,5 +32,12 @@ node_modules/
 dist/
 build/
 .cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sistema / editor
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
